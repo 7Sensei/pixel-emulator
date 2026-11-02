@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pixel-emulator-v1';
+const CACHE_NAME = 'pixel-emulator-v2';
 
 const STATIC_ASSETS = [
   './',
@@ -49,6 +49,31 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   if (!url.protocol.startsWith('http')) return;
 
+  const pathname = url.pathname.toLowerCase();
+  const href = url.href.toLowerCase();
+
+  // Bypass Service Worker untuk file engine emulator (.jar, .wasm, atau folder /engines/)
+  // Langsung teruskan ke jaringan tanpa menyentuh caches.match
+  const isEngineResource =
+    pathname.includes('/engines/') ||
+    pathname.endsWith('.jar') ||
+    pathname.endsWith('.wasm') ||
+    href.includes('.jar') ||
+    href.includes('.wasm');
+
+  if (isEngineResource) {
+    event.respondWith(
+      fetch(event.request).catch((err) => {
+        console.warn('[SW] Engine network fetch bypass error:', err);
+        return new Response('Engine asset fetch failed', {
+          status: 503,
+          statusText: 'Service Unavailable'
+        });
+      })
+    );
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       if (cachedResponse) {
@@ -58,7 +83,7 @@ self.addEventListener('fetch', (event) => {
               const responseToCache = networkResponse.clone();
               caches.open(CACHE_NAME).then((cache) => {
                 cache.put(event.request, responseToCache);
-              });
+              }).catch(() => {});
             }
           })
           .catch(() => {});
@@ -73,10 +98,19 @@ self.addEventListener('fetch', (event) => {
         const responseToCache = networkResponse.clone();
         caches.open(CACHE_NAME).then((cache) => {
           cache.put(event.request, responseToCache);
-        });
+        }).catch(() => {});
 
         return networkResponse;
+      }).catch((err) => {
+        console.warn('[SW] Fetch failed for:', event.request.url, err);
+        return new Response('Resource fetch failed', {
+          status: 503,
+          statusText: 'Service Unavailable'
+        });
       });
+    }).catch((err) => {
+      console.warn('[SW] Cache match error:', err);
+      return fetch(event.request).catch(() => new Response('Network & cache error', { status: 503 }));
     })
   );
 });
