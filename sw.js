@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pixel-emulator-v2';
+const CACHE_NAME = 'pixel-emulator-v3';
 
 const STATIC_ASSETS = [
   './',
@@ -42,7 +42,7 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Fetch: Cache-first strategy for static assets with background revalidation
+// Fetch: Cache-first strategy for static UI assets
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
@@ -52,25 +52,28 @@ self.addEventListener('fetch', (event) => {
   const pathname = url.pathname.toLowerCase();
   const href = url.href.toLowerCase();
 
-  // Bypass Service Worker untuk file engine emulator (.jar, .wasm, atau folder /engines/)
-  // Langsung teruskan ke jaringan tanpa menyentuh caches.match
-  const isEngineResource =
+  // BYPASS MUTLAK:
+  // JANGAN panggil event.respondWith() agar browser menangani request secara native.
+  // Ini krusial untuk:
+  // 1. Seluruh resource /engines/ (EmulatorJS, FreeJ2ME, dsb)
+  // 2. Binary files (.jar, .wasm, .data, .zip, .sf2)
+  // 3. CheerpJ / Leaningtech CDN & EmulatorJS CDN
+  // 4. HTTP Range Requests (Status 206 Partial Content)
+  const shouldBypass =
     pathname.includes('/engines/') ||
     pathname.endsWith('.jar') ||
     pathname.endsWith('.wasm') ||
+    pathname.endsWith('.data') ||
+    pathname.endsWith('.zip') ||
+    pathname.endsWith('.sf2') ||
     href.includes('.jar') ||
-    href.includes('.wasm');
+    href.includes('.wasm') ||
+    href.includes('leaningtech.com') ||
+    href.includes('emulatorjs.org') ||
+    event.request.headers.has('range');
 
-  if (isEngineResource) {
-    event.respondWith(
-      fetch(event.request).catch((err) => {
-        console.warn('[SW] Engine network fetch bypass error:', err);
-        return new Response('Engine asset fetch failed', {
-          status: 503,
-          statusText: 'Service Unavailable'
-        });
-      })
-    );
+  if (shouldBypass) {
+    // Biarkan browser mengeksekusi request secara langsung melalui jaringan native
     return;
   }
 
