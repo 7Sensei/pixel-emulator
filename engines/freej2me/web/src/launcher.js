@@ -1,5 +1,5 @@
 // note that we can only call java stuff if thread not running..
-const cheerpjWebRoot = '/app'+location.pathname.replace(/\/$/,'');
+const cheerpjWebRoot = '/app' + location.pathname.replace(/\/[^/]*$/, '');
 
 const emptyIcon = "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=";
 
@@ -160,10 +160,10 @@ function fillGamesList(games) {
         item.className = "game-item";
 
         const link = document.createElement("a");
-        link.href = "run?app=" + game.appId;
+        link.href = "run.html?app=" + game.appId;
         link.addEventListener('pointerdown', e => {
             if (e.pointerType === 'touch') {
-                link.href = "run?app=" + game.appId + "&mobile=1";
+                link.href = "run.html?app=" + game.appId + "&mobile=1";
             }
         });
 

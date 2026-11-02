@@ -39,6 +39,7 @@ roms/*
 *.7z
 *.rar
 *.tar.gz
+!engines/**/*.zip
 
 # ==========================================
 # Operating System & Editor Files

@@ -11,7 +11,7 @@
 const ENGINE_CONFIG = {
   emulatorjsLocalData: 'engines/emulatorjs/data/',
   emulatorjsCdnData: 'https://cdn.emulatorjs.org/stable/data/',
-  freej2meWebUrl: 'https://zb3.github.io/freej2me-web/web/',
+  freej2meWebUrl: 'engines/freej2me/web/index.html',
   freej2meCdnFallback: 'https://zb3.github.io/freej2me-web/web/',
   romsDir: 'roms',
   catalogueUrl: 'assets/games.json'
