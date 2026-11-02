@@ -11,7 +11,7 @@
 const ENGINE_CONFIG = {
   emulatorjsLocalData: 'engines/emulatorjs/data/',
   emulatorjsCdnData: 'https://cdn.emulatorjs.org/stable/data/',
-  freej2meWebUrl: 'engines/freej2me/web/index.html',
+  freej2meWebUrl: 'https://zb3.github.io/freej2me-web/web/',
   freej2meCdnFallback: 'https://zb3.github.io/freej2me-web/web/',
   romsDir: 'roms',
   catalogueUrl: 'assets/games.json'
@@ -27,15 +27,15 @@ const EXTENSION_CONFIG = {
   nes: { engine: 'emulatorjs', core: 'nes', name: 'Nintendo Entertainment System', badgeClass: 'active-emulatorjs' },
   fds: { engine: 'emulatorjs', core: 'nes', name: 'Famicom Disk System', badgeClass: 'active-emulatorjs' },
   gba: { engine: 'emulatorjs', core: 'gba', name: 'Game Boy Advance', badgeClass: 'active-emulatorjs' },
-  gb:  { engine: 'emulatorjs', core: 'gb',  name: 'Game Boy', badgeClass: 'active-emulatorjs' },
-  gbc: { engine: 'emulatorjs', core: 'gb',  name: 'Game Boy Color', badgeClass: 'active-emulatorjs' },
+  gb: { engine: 'emulatorjs', core: 'gb', name: 'Game Boy', badgeClass: 'active-emulatorjs' },
+  gbc: { engine: 'emulatorjs', core: 'gb', name: 'Game Boy Color', badgeClass: 'active-emulatorjs' },
   sfc: { engine: 'emulatorjs', core: 'snes', name: 'Super Nintendo (SNES)', badgeClass: 'active-emulatorjs' },
   smc: { engine: 'emulatorjs', core: 'snes', name: 'Super Nintendo (SNES)', badgeClass: 'active-emulatorjs' },
 
   // Sega
   gen: { engine: 'emulatorjs', core: 'segaMD', name: 'Sega Mega Drive / Genesis', badgeClass: 'active-emulatorjs' },
   smd: { engine: 'emulatorjs', core: 'segaMD', name: 'Sega Mega Drive', badgeClass: 'active-emulatorjs' },
-  md:  { engine: 'emulatorjs', core: 'segaMD', name: 'Sega Mega Drive', badgeClass: 'active-emulatorjs' },
+  md: { engine: 'emulatorjs', core: 'segaMD', name: 'Sega Mega Drive', badgeClass: 'active-emulatorjs' },
   bin: { engine: 'emulatorjs', core: 'segaMD', name: 'Sega Genesis / Raw ROM', badgeClass: 'active-emulatorjs' }
 };
 
@@ -123,7 +123,7 @@ const DOM = {
   screenFrame: document.getElementById('screen-frame'),
   brandLogo: document.getElementById('brand-logo'),
   coinBadge: document.getElementById('coin-badge'),
-  
+
   // Status & Info Elements
   headerStatusDot: document.getElementById('header-status-dot'),
   headerStatusText: document.getElementById('header-status-text'),
@@ -131,7 +131,7 @@ const DOM = {
   metaExtension: document.getElementById('meta-extension'),
   metaEngine: document.getElementById('meta-engine'),
   metaCore: document.getElementById('meta-core'),
-  
+
   // Viewports & Containers
   idleScreen: document.getElementById('idle-screen'),
   freej2meContainer: document.getElementById('freej2me-container'),
@@ -139,7 +139,7 @@ const DOM = {
   emulatorjsContainer: document.getElementById('emulatorjs-container'),
   emulatorjsViewport: document.getElementById('emulatorjs-viewport'),
   activityLog: document.getElementById('activity-log'),
-  
+
   // Save Data Manager Elements
   btnExportSave: document.getElementById('btn-export-save'),
   btnImportSave: document.getElementById('btn-import-save'),
@@ -296,19 +296,15 @@ async function activateEmulatorJSContainer(gameFile, coreName) {
   ejsTarget.style.cssText = 'width:100%;height:100%;position:relative;display:block;background:#000;';
   DOM.emulatorjsViewport.appendChild(ejsTarget);
 
-  // === 3. Cek ketersediaan loader lokal ===
+  // === 3. Tentukan path data — gunakan lokal jika tersedia, fallback ke CDN ===
   let pathToData = ENGINE_CONFIG.emulatorjsLocalData;
   try {
     const checkRes = await fetch(`${pathToData}loader.js`, { method: 'HEAD' });
-    if (!checkRes.ok) {
-      logMessage('EMU-JS', 'Loader lokal tidak ditemukan, fallback ke CDN resmi...', 'warn');
-      pathToData = ENGINE_CONFIG.emulatorjsCdnData;
-    } else {
-      logMessage('EMU-JS', `Menggunakan core asset lokal di: ${pathToData}`, 'info');
-    }
+    if (!checkRes.ok) throw new Error('not found');
+    logMessage('EMU-JS', `Loader lokal ditemukan di: ${pathToData}`, 'info');
   } catch {
-    logMessage('EMU-JS', 'Memakai CDN resmi EmulatorJS...', 'info');
     pathToData = ENGINE_CONFIG.emulatorjsCdnData;
+    logMessage('EMU-JS', `Menggunakan CDN: ${pathToData}`, 'info');
   }
 
   // === 4. Set semua variabel global EmulatorJS SEBELUM script diinject ===
@@ -324,7 +320,7 @@ async function activateEmulatorJSContainer(gameFile, coreName) {
   DOM.saveStatusText.textContent = `AKTIF [${coreName.toUpperCase()}]`;
   DOM.saveStatusText.className = 'save-status-text';
 
-  logMessage('EMU-JS', `Config: player="${window.EJS_player}", core="${coreName}", url="${gameUrl.substring(0,50)}..."`, 'info');
+  logMessage('EMU-JS', `Config: player="${window.EJS_player}", core="${coreName}", url="${gameUrl.substring(0, 50)}..."`, 'info');
 
   // === 5. KRITIS: Tunggu browser flush layout/paint sebelum inject script ===
   // Double-RAF memastikan elemen #ejs-game-target sudah ter-render di DOM
@@ -381,18 +377,9 @@ async function activateFreeJ2MEContainer(gameFile) {
   DOM.emulatorjsContainer.classList.remove('active');
   DOM.freej2meContainer.classList.add('active');
 
-  let playerUrl = ENGINE_CONFIG.freej2meWebUrl;
-  try {
-    const res = await fetch(playerUrl, { method: 'HEAD' });
-    if (!res.ok) {
-      logMessage('FREEJ2ME', 'Player lokal tidak ditemukan, fallback ke CDN...', 'warn');
-      playerUrl = ENGINE_CONFIG.freej2meCdnFallback;
-    } else {
-      logMessage('FREEJ2ME', `Menggunakan runtime lokal FreeJ2ME di: ${playerUrl}`, 'info');
-    }
-  } catch {
-    playerUrl = ENGINE_CONFIG.freej2meCdnFallback;
-  }
+  // Langsung gunakan URL CDN (freej2meWebUrl sudah mengarah ke CDN)
+  const playerUrl = ENGINE_CONFIG.freej2meWebUrl;
+  logMessage('FREEJ2ME', `Memuat FreeJ2ME Web dari: ${playerUrl}`, 'info');
 
   const iframe = document.createElement('iframe');
   iframe.id = 'freej2me-iframe';
@@ -685,13 +672,13 @@ function renderGameLibrary() {
 
   const filtered = gamesLibrary.filter(game => {
     // Filter Kategori
-    const matchCategory = 
-      selectedCategory === 'all' || 
+    const matchCategory =
+      selectedCategory === 'all' ||
       game.badge.toUpperCase() === selectedCategory.toUpperCase();
 
     // Filter Pencarian
-    const matchQuery = 
-      !query || 
+    const matchQuery =
+      !query ||
       game.title.toLowerCase().includes(query) ||
       game.system.toLowerCase().includes(query) ||
       (game.genre && game.genre.toLowerCase().includes(query)) ||
