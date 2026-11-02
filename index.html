@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Pixel Emulator - Multi-engine retro gaming platform supporting Java ME (FreeJ2ME) and Classic Consoles (EmulatorJS).">
+  <title>Pixel Emulator | Multi-Engine Retro Gaming</title>
+  
+  <!-- Google Fonts: Outfit & Press Start 2P & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Outfit:wght@400;500;600;700&family=Press+Start+2P&display=swap" rel="stylesheet">
+  
+  <!-- Application Stylesheet -->
+  <link rel="stylesheet" href="src/css/style.css">
+</head>
+<body>
+
+  <!-- Top Header Navigation -->
+  <header class="app-header">
+    <div class="brand-section">
+      <div class="brand-logo" aria-hidden="true">
+        <svg viewBox="0 0 24 24">
+          <path d="M7 6h10v2H7zm-2 4h14v2H5zm0 4h14v2H5zm2 4h10v2H7z"/>
+        </svg>
+      </div>
+      <div>
+        <h1 class="brand-title">PIXEL EMULATOR</h1>
+      </div>
+    </div>
+
+    <!-- Active Engine Status Pill -->
+    <div class="header-status-badge">
+      <span class="status-dot" id="header-status-dot"></span>
+      <span id="header-status-text">Standby - Siap Memuat</span>
+    </div>
+
+    <!-- Header Actions -->
+    <div class="header-actions">
+      <button class="btn btn-secondary" id="btn-fullscreen" title="Mode Layar Penuh">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+        </svg>
+        Fullscreen
+      </button>
+      <button class="btn btn-danger" id="btn-reset" title="Hentikan Game & Reset">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18.36 6.64a9 9 0 1 1-12.73 0M12 2v10"/>
+        </svg>
+        Reset
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Grid Wrapper -->
+  <main class="main-wrapper">
+    
+    <!-- Left Sidebar: Controls & File Selectors -->
+    <aside class="sidebar">
+      
+      <!-- Upload File Card -->
+      <section class="card" aria-labelledby="upload-card-title">
+        <h2 class="card-title" id="upload-card-title">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+          </svg>
+          Muat File Game
+        </h2>
+        
+        <div class="upload-dropzone" id="dropzone">
+          <input type="file" id="game-file-input" class="file-input" accept=".jar,.jad,.nes,.gba,.gb,.gbc,.sfc,.smc,.bin,.gen,.md">
+          <div class="dropzone-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="6" width="20" height="12" rx="2"/>
+              <circle cx="8" cy="12" r="2"/>
+              <path d="M14 10h4m-2-2v4"/>
+            </svg>
+          </div>
+          <p class="dropzone-text">Pilih atau Drag & Drop File</p>
+          <p class="dropzone-subtext">Mendukung ROM konsol dan Java ME (.jar)</p>
+          
+          <div class="format-tags">
+            <span class="badge badge-jar">.JAR (J2ME)</span>
+            <span class="badge badge-rom">.NES</span>
+            <span class="badge badge-rom">.GBA</span>
+            <span class="badge badge-rom">.GB / .GBC</span>
+            <span class="badge badge-rom">.SFC</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Preset / Quick Demo Launcher -->
+      <section class="card" aria-labelledby="preset-card-title">
+        <h2 class="card-title" id="preset-card-title">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="5 3 19 12 5 21 5 3"/>
+          </svg>
+          Uji Coba Cepat (Presets)
+        </h2>
+        <div class="select-group">
+          <label for="preset-select" class="dropzone-subtext">Pilih simulasi game untuk menguji router engine:</label>
+          <select id="preset-select" class="custom-select">
+            <option value="" disabled selected>-- Pilih Demo Game --</option>
+            <optgroup label="Java ME Mobile Games (freej2me-web)">
+              <option value="bounce_tales.jar">Bounce Tales (Nokia) [.jar]</option>
+              <option value="diamond_rush.jar">Diamond Rush (Gameloft) [.jar]</option>
+              <option value="sonic_advance_mobile.jar">Sonic the Hedgehog Mobile [.jar]</option>
+            </optgroup>
+            <optgroup label="Classic Consoles (EmulatorJS)">
+              <option value="super_mario_bros.nes">Super Mario Bros (NES) [.nes]</option>
+              <option value="pokemon_emerald.gba">Pokemon Emerald (GBA) [.gba]</option>
+              <option value="zelda_minish_cap.gba">The Legend of Zelda (GBA) [.gba]</option>
+              <option value="tetris_dx.gbc">Tetris DX (Game Boy Color) [.gbc]</option>
+              <option value="chrono_trigger.sfc">Chrono Trigger (SNES) [.sfc]</option>
+            </optgroup>
+          </select>
+          <button class="btn btn-primary btn-block" id="btn-load-preset">
+            Jalankan Game Terpilih
+          </button>
+        </div>
+      </section>
+
+      <!-- Metadata & Engine Inspector -->
+      <section class="card" aria-labelledby="info-card-title">
+        <h2 class="card-title" id="info-card-title">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="16" x2="12" y2="12"/>
+            <line x1="12" y1="8" x2="12.01" y2="8"/>
+          </svg>
+          Info Game & Router
+        </h2>
+        <div class="meta-list">
+          <div class="meta-item">
+            <span class="meta-label">File Game</span>
+            <span class="meta-value" id="meta-filename">-</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Ekstensi</span>
+            <span class="meta-value" id="meta-extension">-</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Target Engine</span>
+            <span class="meta-value" id="meta-engine">-</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Core / Driver</span>
+            <span class="meta-value" id="meta-core">-</span>
+          </div>
+        </div>
+      </section>
+
+    </aside>
+
+    <!-- Right Center Stage: Screen Viewport & Engine Containers -->
+    <section class="viewport-stage" aria-label="Viewport Emulator">
+      
+      <!-- Emulator Bezel / Frame -->
+      <div class="screen-frame" id="screen-frame">
+        
+        <!-- Retro CRT Scanline Shader Effect -->
+        <div class="crt-overlay" id="crt-overlay" aria-hidden="true"></div>
+
+        <!-- 1. Idle Screen (Ditampilkan saat belum ada game yang dimuat) -->
+        <div class="idle-screen" id="idle-screen">
+          <div class="retro-arcade-art">PIXEL EMULATOR</div>
+          <h3 class="idle-title">Pilih Game untuk Memulai</h3>
+          <p class="idle-description">
+            Sistem otomatis mendeteksi format file dan mengarahkan ke engine yang sesuai secara modular:
+          </p>
+
+          <div class="engine-hints">
+            <div class="engine-hint-card">
+              <div class="hint-engine-title j2me">
+                <span>☕</span> FreeJ2ME Web
+              </div>
+              <p class="hint-desc">Khusus game Java Mobile (ekstensi <strong>.jar</strong> atau <strong>.jad</strong>).</p>
+            </div>
+
+            <div class="engine-hint-card">
+              <div class="hint-engine-title ejs">
+                <span>🎮</span> EmulatorJS
+              </div>
+              <p class="hint-desc">ROM konsol retro (<strong>.nes</strong>, <strong>.gba</strong>, <strong>.gbc</strong>, <strong>.sfc</strong>, dll).</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. Container FreeJ2ME-web -->
+        <div class="emulator-container" id="freej2me-container" aria-label="FreeJ2ME Web Container">
+          <div class="engine-canvas-wrap" id="freej2me-viewport">
+            <!-- FreeJ2ME Canvas / iFrame di-inject di sini oleh main.js -->
+          </div>
+        </div>
+
+        <!-- 3. Container EmulatorJS -->
+        <div class="emulator-container" id="emulatorjs-container" aria-label="EmulatorJS Container">
+          <div class="engine-canvas-wrap" id="emulatorjs-viewport">
+            <!-- EmulatorJS Canvas / Container di-inject di sini oleh main.js -->
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Realtime Activity Log / Console Bar -->
+      <div class="console-box" id="activity-log" aria-live="polite" aria-label="Log Aktivitas Router">
+        <!-- Log items akan ditambahkan secara dinamis di sini -->
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="app-footer">
+    <p>Pixel Emulator Architecture &bull; Dual Engine (EmulatorJS &amp; FreeJ2ME-web) &bull; Local Git Ready</p>
+  </footer>
+
+  <!-- Main JavaScript Logic -->
+  <script src="src/js/main.js"></script>
+</body>
+</html>

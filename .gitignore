@@ -1,0 +1,60 @@
+# ==========================================
+# ROMs & Game Archives (Large Binary Files)
+# ==========================================
+*.nes
+*.fds
+*.gb
+*.gbc
+*.gba
+*.sfc
+*.smc
+*.bin
+*.gen
+*.smd
+*.iso
+*.cue
+*.chd
+*.img
+*.rom
+*.jar
+*.jad
+
+# Save files & Emulator States
+*.sav
+*.srm
+*.state*
+*.save
+*.dsv
+
+# ROM Directory (Keep directory tracked, ignore ROM binaries)
+roms/*
+!roms/.gitkeep
+!roms/README.md
+
+# Large Archives
+*.zip
+*.7z
+*.rar
+*.tar.gz
+
+# ==========================================
+# Operating System & Editor Files
+# ==========================================
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+
+.vscode/
+.idea/
+*.swp
+*.tmp
+*.log
+
+# ==========================================
+# Dependencies & Build Output
+# ==========================================
+node_modules/
+dist/
+build/
