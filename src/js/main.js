@@ -297,7 +297,8 @@ async function activateEmulatorJSContainer(gameFile, coreName) {
   DOM.emulatorjsViewport.appendChild(ejsTarget);
 
   // === 3. Tentukan path data — gunakan lokal jika tersedia, fallback ke CDN ===
-  let pathToData = ENGINE_CONFIG.emulatorjsLocalData;
+  // let pathToData = ENGINE_CONFIG.emulatorjsLocalData;
+  let pathToData = ENGINE_CONFIG.emulatorjsCdnData;
   try {
     const checkRes = await fetch(`${pathToData}loader.js`, { method: 'HEAD' });
     if (!checkRes.ok) throw new Error('not found');
@@ -896,20 +897,26 @@ DOM.mobileTabs.forEach(btn => {
 });
 
 // ============================================================================
-// Web Gamepad API Subsystem (Navigasi Katalog Gamepad)
+// Web Gamepad API Subsystem (Navigasi Katalog Gamepad PS3 / Standar)
 // ============================================================================
 let gamepadFocusIndex = -1;
-let lastGamepadNavTime = 0;
-let prevGamepadButtonA = false;
-let isGamepadNavActive = false;
+let lastGamepadNavTimestamp = 0;
+let prevGamepadButtonCross = false;
+let isGamepadNavHeld = false;
 let connectedGamepadsCount = 0;
 
+const GAMEPAD_DEADZONE = 0.5;
+const GAMEPAD_NAV_COOLDOWN_MS = 200; // Cooldown 200ms untuk mencegah pergeseran terlalu cepat saat stik/d-pad ditahan
+
+/**
+ * Menghitung jumlah kolom kartu pada grid secara dinamis berdasarkan posisi elemen.
+ */
 function getGridColumnCount(cards) {
-  if (cards.length <= 1) return 1;
+  if (!cards || cards.length <= 1) return 1;
   const firstTop = cards[0].offsetTop;
   let cols = 0;
   for (let i = 0; i < cards.length; i++) {
-    if (Math.abs(cards[i].offsetTop - firstTop) < 12) {
+    if (Math.abs(cards[i].offsetTop - firstTop) < 15) {
       cols++;
     } else {
       break;
@@ -918,6 +925,9 @@ function getGridColumnCount(cards) {
   return Math.max(1, cols);
 }
 
+/**
+ * Memperbarui sorotan fokus pada kartu game di katalog.
+ */
 function updateGamepadFocus(newIndex, cards) {
   if (!cards || cards.length === 0) return;
   newIndex = Math.max(0, Math.min(cards.length - 1, newIndex));
@@ -928,45 +938,64 @@ function updateGamepadFocus(newIndex, cards) {
   const targetCard = cards[gamepadFocusIndex];
   if (targetCard) {
     targetCard.classList.add('gamepad-focus');
-    targetCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    targetCard.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
     playChiptune('click');
   }
 }
 
+/**
+ * Sistem polling gamepad: membaca input analog stik kiri dan D-pad dengan deadzone & cooldown.
+ */
 function pollGamepad() {
   const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
-  let activeGamepad = null;
+  let gp = null;
 
   for (let i = 0; i < gamepads.length; i++) {
     if (gamepads[i] && gamepads[i].connected) {
-      activeGamepad = gamepads[i];
+      gp = gamepads[i];
       break;
     }
   }
 
   // Polling navigasi katalog hanya berjalan saat tidak ada game yang sedang aktif di emulator
-  if (activeGamepad && !state.activeEngine) {
+  if (gp && !state.activeEngine) {
     const cards = Array.from(DOM.gamesGrid.querySelectorAll('.game-card'));
     if (cards.length > 0) {
-      const b = activeGamepad.buttons;
-      const axes = activeGamepad.axes;
+      const b = gp.buttons;
+      const axes = gp.axes;
 
-      // Navigasi D-Pad atau Left Analog Stick
-      const up = (b[12] && b[12].pressed) || (axes[1] !== undefined && axes[1] < -0.5);
-      const down = (b[13] && b[13].pressed) || (axes[1] !== undefined && axes[1] > 0.5);
-      const left = (b[14] && b[14].pressed) || (axes[0] !== undefined && axes[0] < -0.5);
-      const right = (b[15] && b[15].pressed) || (axes[0] !== undefined && axes[0] > 0.5);
+      // 1. Dukungan Analog Kiri (Axes 0 = X, Axes 1 = Y) dengan Deadzone 0.5
+      const axisX = (axes && axes[0] !== undefined) ? axes[0] : 0;
+      const axisY = (axes && axes[1] !== undefined) ? axes[1] : 0;
 
-      // Tombol A (Xbox) / Cross (PlayStation) - Tombol 0
-      const btnA = Boolean(b[0] && b[0].pressed);
+      const analogLeft = axisX < -GAMEPAD_DEADZONE;
+      const analogRight = axisX > GAMEPAD_DEADZONE;
+      const analogUp = axisY < -GAMEPAD_DEADZONE;
+      const analogDown = axisY > GAMEPAD_DEADZONE;
 
+      // 2. Dukungan D-Pad (12=Atas, 13=Bawah, 14=Kiri, 15=Kanan)
+      const dpadUp = Boolean(b[12] && (b[12].pressed || b[12].value > 0.5));
+      const dpadDown = Boolean(b[13] && (b[13].pressed || b[13].value > 0.5));
+      const dpadLeft = Boolean(b[14] && (b[14].pressed || b[14].value > 0.5));
+      const dpadRight = Boolean(b[15] && (b[15].pressed || b[15].value > 0.5));
+
+      // Gabungkan pembacaan D-Pad dan Analog
+      const moveLeft = dpadLeft || analogLeft;
+      const moveRight = dpadRight || analogRight;
+      const moveUp = dpadUp || analogUp;
+      const moveDown = dpadDown || analogDown;
+
+      // Tombol A (Xbox) / Cross (PlayStation / BthPS3) - Button index 0
+      const btnCross = Boolean(b[0] && (b[0].pressed || b[0].value > 0.5));
+
+      const anyMove = moveLeft || moveRight || moveUp || moveDown;
       const now = performance.now();
-      const anyDir = up || down || left || right;
 
-      if (anyDir) {
-        if (!isGamepadNavActive || (now - lastGamepadNavTime > 220)) {
-          isGamepadNavActive = true;
-          lastGamepadNavTime = now;
+      // 3. Mekanisme Cooldown (200ms) saat stik / D-Pad ditahan
+      if (anyMove) {
+        if (!isGamepadNavHeld || (now - lastGamepadNavTimestamp >= GAMEPAD_NAV_COOLDOWN_MS)) {
+          isGamepadNavHeld = true;
+          lastGamepadNavTimestamp = now;
 
           if (gamepadFocusIndex < 0 || gamepadFocusIndex >= cards.length) {
             updateGamepadFocus(0, cards);
@@ -974,26 +1003,42 @@ function pollGamepad() {
             const cols = getGridColumnCount(cards);
             let nextIndex = gamepadFocusIndex;
 
-            if (left) nextIndex = Math.max(0, gamepadFocusIndex - 1);
-            else if (right) nextIndex = Math.min(cards.length - 1, gamepadFocusIndex + 1);
-            else if (up) nextIndex = Math.max(0, gamepadFocusIndex - cols);
-            else if (down) nextIndex = Math.min(cards.length - 1, gamepadFocusIndex + cols);
+            // Navigasi Grid 2D:
+            // Kiri / Kanan menggeser indeks sebanyak -1 / +1
+            if (moveLeft) {
+              nextIndex = Math.max(0, gamepadFocusIndex - 1);
+            } else if (moveRight) {
+              nextIndex = Math.min(cards.length - 1, gamepadFocusIndex + 1);
+            }
+            // Atas / Bawah melompat sebanyak jumlah kolom dinamis
+            else if (moveUp) {
+              nextIndex = Math.max(0, gamepadFocusIndex - cols);
+            } else if (moveDown) {
+              if (gamepadFocusIndex + cols < cards.length) {
+                nextIndex = gamepadFocusIndex + cols;
+              } else {
+                nextIndex = cards.length - 1;
+              }
+            }
 
-            updateGamepadFocus(nextIndex, cards);
+            if (nextIndex !== gamepadFocusIndex) {
+              updateGamepadFocus(nextIndex, cards);
+            }
           }
         }
       } else {
-        isGamepadNavActive = false;
+        // Reset status tahan agar input berikutnya langsung instan
+        isGamepadNavHeld = false;
       }
 
-      // Tekan tombol A/Cross untuk memuat game yang sedang disorot
-      if (btnA && !prevGamepadButtonA) {
+      // Tekan tombol Cross / A untuk memuat game yang sedang disorot
+      if (btnCross && !prevGamepadButtonCross) {
         if (gamepadFocusIndex >= 0 && gamepadFocusIndex < cards.length) {
           const targetCard = cards[gamepadFocusIndex];
           targetCard.click();
         }
       }
-      prevGamepadButtonA = btnA;
+      prevGamepadButtonCross = btnCross;
     }
   }
 
