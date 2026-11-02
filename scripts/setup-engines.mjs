@@ -67,7 +67,9 @@ async function setupEmulatorJS() {
   console.log('\n  Mengunduh paket core binary WASM resmi...');
   const cores = [
     { name: 'fceumm', pkg: '@emulatorjs/core-fceumm', ver: '4.2.3' },
-    { name: 'mgba', pkg: '@emulatorjs/core-mgba', ver: '4.2.3' }
+    { name: 'mgba', pkg: '@emulatorjs/core-mgba', ver: '4.2.3' },
+    { name: 'snes9x', pkg: '@emulatorjs/core-snes9x', ver: '4.2.3' },
+    { name: 'gambatte', pkg: '@emulatorjs/core-gambatte', ver: '4.2.3' }
   ];
 
   for (const core of cores) {

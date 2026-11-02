@@ -43,8 +43,56 @@ const EXTENSION_CONFIG = {
 const state = {
   activeEngine: null, // 'freej2me' | 'emulatorjs' | null
   activeGameFile: null,
-  activeBlobUrl: null
+  activeBlobUrl: null,
+  sfxEnabled: true,
+  crtEnabled: true
 };
+
+// Web Audio API Retro Chiptune Synthesizer
+let audioCtx = null;
+function playChiptune(type = 'click') {
+  if (!state.sfxEnabled) return;
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    const now = audioCtx.currentTime;
+
+    if (type === 'coin') {
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(987.77, now); // B5
+      osc.frequency.setValueAtTime(1318.51, now + 0.08); // E6
+      gain.gain.setValueAtTime(0.12, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+      osc.start(now);
+      osc.stop(now + 0.35);
+    } else if (type === 'start') {
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(261.63, now); // C4
+      osc.frequency.setValueAtTime(329.63, now + 0.06); // E4
+      osc.frequency.setValueAtTime(392.00, now + 0.12); // G4
+      osc.frequency.setValueAtTime(523.25, now + 0.18); // C5
+      gain.gain.setValueAtTime(0.15, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+      osc.start(now);
+      osc.stop(now + 0.45);
+    } else {
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(440, now);
+      osc.frequency.exponentialRampToValueAtTime(880, now + 0.05);
+      gain.gain.setValueAtTime(0.07, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+      osc.start(now);
+      osc.stop(now + 0.06);
+    }
+  } catch (e) {
+    // Autoplay policy fallback
+  }
+}
 
 // DOM Elements Cache
 const DOM = {
@@ -54,7 +102,13 @@ const DOM = {
   btnLoadPreset: document.getElementById('btn-load-preset'),
   btnFullscreen: document.getElementById('btn-fullscreen'),
   btnReset: document.getElementById('btn-reset'),
+  btnToggleCrt: document.getElementById('btn-toggle-crt'),
+  btnToggleSfx: document.getElementById('btn-toggle-sfx'),
+  btnClearLog: document.getElementById('btn-clear-log'),
+  sfxIcon: document.getElementById('sfx-icon'),
   screenFrame: document.getElementById('screen-frame'),
+  brandLogo: document.getElementById('brand-logo'),
+  coinBadge: document.getElementById('coin-badge'),
   
   // Status & Info Elements
   headerStatusDot: document.getElementById('header-status-dot'),
@@ -70,7 +124,13 @@ const DOM = {
   freej2meViewport: document.getElementById('freej2me-viewport'),
   emulatorjsContainer: document.getElementById('emulatorjs-container'),
   emulatorjsViewport: document.getElementById('emulatorjs-viewport'),
-  activityLog: document.getElementById('activity-log')
+  activityLog: document.getElementById('activity-log'),
+  
+  // Mobile Tabs
+  mobileTabs: document.querySelectorAll('.mobile-tab-btn'),
+  controlsSidebar: document.getElementById('controls-sidebar'),
+  screenStage: document.getElementById('screen-stage'),
+  telemetryBar: document.getElementById('telemetry-bar')
 };
 
 // ============================================================================
@@ -102,10 +162,10 @@ function getExtension(filename) {
 }
 
 function updateMetadata(filename, ext, config) {
-  DOM.metaFilename.textContent = filename || '-';
-  DOM.metaExtension.textContent = ext ? `.${ext.toUpperCase()}` : '-';
-  DOM.metaEngine.textContent = config ? config.name : '-';
-  DOM.metaCore.textContent = config ? config.core.toUpperCase() : '-';
+  DOM.metaFilename.textContent = filename || 'NONE';
+  DOM.metaExtension.textContent = ext ? `.${ext.toUpperCase()}` : '--';
+  DOM.metaEngine.textContent = config ? config.name : 'STANDBY';
+  DOM.metaCore.textContent = config ? config.core.toUpperCase() : 'IDLE';
 }
 
 function updateHeaderStatus(text, badgeClass = null) {
@@ -120,13 +180,11 @@ function updateHeaderStatus(text, badgeClass = null) {
 // Cleanup & Reset Function
 // ============================================================================
 function cleanupActiveEngine() {
-  // Hapus object URL lama agar tidak membocorkan memori
   if (state.activeBlobUrl) {
     URL.revokeObjectURL(state.activeBlobUrl);
     state.activeBlobUrl = null;
   }
 
-  // Hentikan instance EmulatorJS jika sedang aktif
   if (window.EJS_emulator && typeof window.EJS_emulator.destroy === 'function') {
     try {
       window.EJS_emulator.destroy();
@@ -135,11 +193,9 @@ function cleanupActiveEngine() {
     }
   }
 
-  // Hapus script loader EmulatorJS yang lama
   const oldScript = document.getElementById('ejs-loader-script');
   if (oldScript) oldScript.remove();
 
-  // Bersihkan objek global EmulatorJS
   delete window.EJS_player;
   delete window.EJS_core;
   delete window.EJS_gameUrl;
@@ -147,7 +203,6 @@ function cleanupActiveEngine() {
   delete window.EJS_pathtodata;
   delete window.EJS_emulator;
 
-  // Bersihkan konten viewport DOM
   DOM.freej2meViewport.innerHTML = '';
   DOM.emulatorjsViewport.innerHTML = '';
   DOM.freej2meContainer.classList.remove('active');
@@ -158,30 +213,23 @@ function cleanupActiveEngine() {
 }
 
 function resetToIdle() {
+  playChiptune('click');
   cleanupActiveEngine();
   DOM.idleScreen.classList.remove('hidden');
   updateMetadata(null, null, null);
-  updateHeaderStatus('Standby - Siap Memuat', null);
+  updateHeaderStatus('STANDBY // READY', null);
   logMessage('SYSTEM', 'Emulator di-reset ke kondisi awal.', 'warn');
 }
 
 // ============================================================================
 // 1. Implementasi Container EmulatorJS
 // ============================================================================
-/**
- * Menginisialisasi dan merender ROM konsol menggunakan engine EmulatorJS.
- * Mendefinisikan objek konfigurasi global EJS_player, EJS_pathtodata, EJS_gameUrl.
- *
- * @param {File|Blob|string} gameFile - File objek dari input atau path string ROM.
- * @param {string} coreName - Nama sistem core EmulatorJS ('nes', 'gba', 'gb', 'snes', dll).
- */
 async function activateEmulatorJSContainer(gameFile, coreName) {
   logMessage('EMU-JS', `Memulai aktivasi container EmulatorJS [Core: ${coreName}]...`, 'info');
+  playChiptune('start');
 
-  // Bersihkan engine yang sedang berjalan sebelumnya
   cleanupActiveEngine();
 
-  // Tentukan nama file dan URL game
   let gameUrl = '';
   let gameName = '';
 
@@ -197,17 +245,15 @@ async function activateEmulatorJSContainer(gameFile, coreName) {
   state.activeEngine = 'emulatorjs';
   state.activeGameFile = gameFile;
 
-  // Siapkan tampilan viewport
   DOM.idleScreen.classList.add('hidden');
   DOM.freej2meContainer.classList.remove('active');
   DOM.emulatorjsContainer.classList.add('active');
 
-  // Buat elemen target div untuk canvas EmulatorJS
   DOM.emulatorjsViewport.innerHTML = `
     <div id="ejs-game-target" style="width: 100%; height: 100%; position: relative;"></div>
   `;
 
-  // Cek apakah loader lokal di engines/emulatorjs/data/ tersedia
+  // Cek loader lokal di engines/emulatorjs/data/
   let pathToData = ENGINE_CONFIG.emulatorjsLocalData;
   try {
     const checkRes = await fetch(`${pathToData}loader.js`, { method: 'HEAD' });
@@ -222,7 +268,7 @@ async function activateEmulatorJSContainer(gameFile, coreName) {
     pathToData = ENGINE_CONFIG.emulatorjsCdnData;
   }
 
-  // Definisikan variabel konfigurasi global EmulatorJS (EJS_*)
+  // Definisikan objek konfigurasi global EmulatorJS
   window.EJS_player = '#ejs-game-target';
   window.EJS_core = coreName;
   window.EJS_gameUrl = gameUrl;
@@ -234,13 +280,12 @@ async function activateEmulatorJSContainer(gameFile, coreName) {
 
   logMessage('EMU-JS', `EJS_player = "${window.EJS_player}", Core = "${coreName}", ROM = "${gameName}"`, 'info');
 
-  // Muat skrip loader.js untuk menginisialisasi canvas dan WebAssembly
   const script = document.createElement('script');
   script.id = 'ejs-loader-script';
   script.src = `${pathToData}loader.js`;
 
   script.onload = () => {
-    logMessage('EMU-JS', `Script loader berhasil dimuat. Render canvas ROM sedang dimulai...`, 'info');
+    logMessage('EMU-JS', `Script loader berhasil dimuat. Render canvas ROM dimulai.`, 'info');
   };
 
   script.onerror = () => {
@@ -253,16 +298,10 @@ async function activateEmulatorJSContainer(gameFile, coreName) {
 // ============================================================================
 // 2. Implementasi Container FreeJ2ME-web
 // ============================================================================
-/**
- * Menginisialisasi dan merender game Java ME (.jar) menggunakan FreeJ2ME-web.
- * Menghubungkan file ke launcher kanvas CheerpJ / FreeJ2ME.
- *
- * @param {File|Blob|string} gameFile - File objek .jar atau path string.
- */
 async function activateFreeJ2MEContainer(gameFile) {
   logMessage('FREEJ2ME', `Memulai aktivasi container FreeJ2ME-web...`, 'info');
+  playChiptune('start');
 
-  // Bersihkan engine sebelumnya
   cleanupActiveEngine();
 
   let gameName = '';
@@ -275,17 +314,15 @@ async function activateFreeJ2MEContainer(gameFile) {
   state.activeEngine = 'freej2me';
   state.activeGameFile = gameFile;
 
-  // Siapkan tampilan viewport
   DOM.idleScreen.classList.add('hidden');
   DOM.emulatorjsContainer.classList.remove('active');
   DOM.freej2meContainer.classList.add('active');
 
-  // Cek apakah build web lokal di engines/freej2me/web/index.html tersedia
   let playerUrl = ENGINE_CONFIG.freej2meWebUrl;
   try {
     const res = await fetch(playerUrl, { method: 'HEAD' });
     if (!res.ok) {
-      logMessage('FREEJ2ME', 'Player lokal tidak ditemukan, menggunakan fallback hosted web player...', 'warn');
+      logMessage('FREEJ2ME', 'Player lokal tidak ditemukan, menggunakan fallback CDN...', 'warn');
       playerUrl = ENGINE_CONFIG.freej2meCdnFallback;
     } else {
       logMessage('FREEJ2ME', `Menggunakan runtime lokal FreeJ2ME di: ${playerUrl}`, 'info');
@@ -294,14 +331,12 @@ async function activateFreeJ2MEContainer(gameFile) {
     playerUrl = ENGINE_CONFIG.freej2meCdnFallback;
   }
 
-  // Buat iFrame terisolasi untuk CheerpJ runtime
   const iframe = document.createElement('iframe');
   iframe.id = 'freej2me-iframe';
   iframe.src = playerUrl;
   iframe.style.width = '100%';
   iframe.style.height = '100%';
   iframe.style.border = 'none';
-  iframe.style.borderRadius = '12px';
   iframe.setAttribute('allow', 'autoplay; fullscreen');
   iframe.setAttribute('title', 'FreeJ2ME Web Player');
 
@@ -310,30 +345,25 @@ async function activateFreeJ2MEContainer(gameFile) {
 
   logMessage('FREEJ2ME', `Container iFrame terpasang. Menunggu inisialisasi CheerpJ...`, 'info');
 
-  // Ketika iFrame siap, suntikkan file .jar yang dipilih langsung ke input form launcher FreeJ2ME
   iframe.onload = async () => {
-    logMessage('FREEJ2ME', `iFrame FreeJ2ME berhasil dimuat.`, 'info');
+    logMessage('FREEJ2ME', `iFrame FreeJ2ME siap.`, 'info');
 
     try {
-      // Karena disajikan dari local server yang sama (same origin), kita dapat mengakses dokumen iframe
       const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
       const targetInput = iframeDoc.getElementById('game-file-input');
 
       if (!targetInput) {
-        logMessage('FREEJ2ME', `Player FreeJ2ME siap. Silakan operasikan kontrol pada kanvas.`, 'info');
+        logMessage('FREEJ2ME', `Player FreeJ2ME siap di kanvas.`, 'info');
         return;
       }
 
-      // 1. Jika pengguna mengunggah objek File asli (.jar)
       if (gameFile instanceof File) {
         const dataTransfer = new DataTransfer();
         dataTransfer.items.add(gameFile);
         targetInput.files = dataTransfer.files;
         targetInput.dispatchEvent(new Event('change', { bubbles: true }));
         logMessage('FREEJ2ME', `File JAR "${gameName}" langsung disuntikkan ke launcher FreeJ2ME.`, 'info');
-      } 
-      // 2. Jika memilih preset string URL, unduh blob-nya lalu suntikkan
-      else if (typeof gameFile === 'string') {
+      } else if (typeof gameFile === 'string') {
         try {
           const fetchRes = await fetch(gameFile);
           if (fetchRes.ok) {
@@ -343,17 +373,16 @@ async function activateFreeJ2MEContainer(gameFile) {
             dataTransfer.items.add(fileObj);
             targetInput.files = dataTransfer.files;
             targetInput.dispatchEvent(new Event('change', { bubbles: true }));
-            logMessage('FREEJ2ME', `Preset "${gameName}" berhasil diunduh dan diproses ke kanvas FreeJ2ME.`, 'info');
+            logMessage('FREEJ2ME', `Preset "${gameName}" berhasil diproses ke kanvas FreeJ2ME.`, 'info');
           } else {
-            logMessage('FREEJ2ME', `File preset lokal "${gameName}" belum ada di folder roms/. Launcher siap untuk drag-and-drop manual.`, 'warn');
+            logMessage('FREEJ2ME', `Preset file "${gameName}" belum ada di folder roms/.`, 'warn');
           }
-        } catch (fetchErr) {
-          logMessage('FREEJ2ME', `Launcher siap di iFrame. Silakan masukkan file JAR secara manual.`, 'info');
+        } catch {
+          logMessage('FREEJ2ME', `Silakan unggah file JAR secara manual di kanvas player.`, 'info');
         }
       }
-    } catch (crossErr) {
-      // Terjadi jika iframe berasal dari origin berbeda (misal fallback ke URL luar)
-      logMessage('FREEJ2ME', `Player FreeJ2ME aktif di viewport. Anda dapat langsung mengunggah file di dalam kanvas player.`, 'info');
+    } catch {
+      logMessage('FREEJ2ME', `Player aktif di viewport.`, 'info');
     }
   };
 }
@@ -366,43 +395,71 @@ function routeGame(gameFile, filenameOverride = null) {
   const ext = getExtension(filename);
   const config = EXTENSION_CONFIG[ext];
 
-  logMessage('ROUTER', `Menganalisis file: "${filename}" (ekstensi .${ext})`, 'router');
+  logMessage('ROUTER', `Menganalisis file: "${filename}" (.${ext})`, 'router');
 
   if (!config) {
-    logMessage('ERROR', `Format file .${ext} belum didukung oleh sistem.`, 'error');
+    logMessage('ERROR', `Format file .${ext} belum didukung sistem.`, 'error');
     alert(`Format file ".${ext}" belum didukung.\nSilakan pilih file .jar untuk J2ME, atau .nes/.gba/.gb/.sfc untuk EmulatorJS.`);
     return;
   }
 
-  // Perbarui UI Metadata & Status
   updateMetadata(filename, ext, config);
 
   if (config.engine === 'freej2me') {
-    updateHeaderStatus(`FreeJ2ME Active: ${filename}`, config.badgeClass);
+    updateHeaderStatus(`J2ME ACTIVE // ${filename}`, config.badgeClass);
     activateFreeJ2MEContainer(gameFile);
   } else if (config.engine === 'emulatorjs') {
-    updateHeaderStatus(`EmulatorJS Active [${config.core.toUpperCase()}]: ${filename}`, config.badgeClass);
+    updateHeaderStatus(`EMU-JS [${config.core.toUpperCase()}] // ${filename}`, config.badgeClass);
     activateEmulatorJSContainer(gameFile, config.core);
+  }
+
+  // Pada mobile: otomatis alihkan pandangan ke layar Monitor
+  if (window.innerWidth <= 860) {
+    switchMobileTab('screen-stage');
   }
 }
 
-// ============================================================================
-// Event Listeners: Input Form, Presets, Controls
-// ============================================================================
 function handleFileInput(file) {
   if (!file) return;
+  playChiptune('coin');
   logMessage('SYSTEM', `File dipilih dari input: "${file.name}" (${(file.size / 1024).toFixed(1)} KB)`, 'info');
   routeGame(file);
 }
 
-// Input file biasa
+// ============================================================================
+// Mobile Viewport Tabs Switcher
+// ============================================================================
+function switchMobileTab(targetId) {
+  DOM.mobileTabs.forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.target === targetId);
+  });
+
+  if (targetId === 'screen-stage') {
+    DOM.controlsSidebar.classList.add('mobile-hidden');
+    DOM.screenStage.classList.remove('mobile-hidden');
+    DOM.telemetryBar.classList.add('mobile-hidden');
+  } else if (targetId === 'controls-sidebar') {
+    DOM.controlsSidebar.classList.remove('mobile-hidden');
+    DOM.screenStage.classList.add('mobile-hidden');
+    DOM.telemetryBar.classList.add('mobile-hidden');
+  } else if (targetId === 'telemetry-bar') {
+    DOM.controlsSidebar.classList.add('mobile-hidden');
+    DOM.screenStage.classList.add('mobile-hidden');
+    DOM.telemetryBar.classList.remove('mobile-hidden');
+  }
+}
+
+// ============================================================================
+// Event Listeners: Input, Controls, Visual Tools
+// ============================================================================
+// File input
 DOM.fileInput.addEventListener('change', (e) => {
   if (e.target.files && e.target.files[0]) {
     handleFileInput(e.target.files[0]);
   }
 });
 
-// Drag and drop ke area dropzone
+// Dropzone drag & drop
 DOM.dropzone.addEventListener('dragover', (e) => {
   e.preventDefault();
   DOM.dropzone.classList.add('dragover');
@@ -420,35 +477,72 @@ DOM.dropzone.addEventListener('drop', (e) => {
   }
 });
 
-// Pemilihan preset demo
+// Presets
 DOM.btnLoadPreset.addEventListener('click', () => {
+  playChiptune('click');
   const selected = DOM.presetSelect.value;
   if (!selected) {
-    alert('Pilih salah satu demo game dari daftar terlebih dahulu.');
+    alert('Pilih salah satu demo game dari dropdown.');
     return;
   }
-
   const romPath = `${ENGINE_CONFIG.romsDir}/${selected}`;
-  logMessage('SYSTEM', `Menjalankan preset: "${selected}"`, 'info');
   routeGame(romPath, selected);
 });
 
-// Tombol Reset
+// Reset
 DOM.btnReset.addEventListener('click', resetToIdle);
 
-// Tombol Fullscreen
+// Fullscreen
 DOM.btnFullscreen.addEventListener('click', () => {
+  playChiptune('click');
   if (!document.fullscreenElement) {
     DOM.screenFrame.requestFullscreen().catch(err => {
-      logMessage('ERROR', `Gagal masuk layar penuh: ${err.message}`, 'error');
+      logMessage('ERROR', `Gagal masuk fullscreen: ${err.message}`, 'error');
     });
   } else {
     document.exitFullscreen();
   }
 });
 
+// CRT Scanlines Toggle
+DOM.btnToggleCrt.addEventListener('click', () => {
+  playChiptune('click');
+  state.crtEnabled = !state.crtEnabled;
+  document.body.classList.toggle('crt-enabled', state.crtEnabled);
+  DOM.btnToggleCrt.classList.toggle('active', state.crtEnabled);
+  logMessage('CRT', `Efek scanline CRT: ${state.crtEnabled ? 'AKTIF' : 'NONAKTIF'}`, 'info');
+});
+
+// SFX Toggle
+DOM.btnToggleSfx.addEventListener('click', () => {
+  state.sfxEnabled = !state.sfxEnabled;
+  DOM.btnToggleSfx.classList.toggle('active', state.sfxEnabled);
+  DOM.sfxIcon.textContent = state.sfxEnabled ? '🔊' : '🔇';
+  if (state.sfxEnabled) playChiptune('coin');
+  logMessage('AUDIO', `Efek suara arcade: ${state.sfxEnabled ? 'AKTIF' : 'NONAKTIF'}`, 'info');
+});
+
+// Clear Log
+DOM.btnClearLog.addEventListener('click', () => {
+  playChiptune('click');
+  DOM.activityLog.innerHTML = '';
+});
+
+// Easter egg chiptune on logo or coin badge
+DOM.brandLogo.addEventListener('click', () => playChiptune('coin'));
+DOM.coinBadge.addEventListener('click', () => playChiptune('coin'));
+
+// Mobile Tab Buttons
+DOM.mobileTabs.forEach(btn => {
+  btn.addEventListener('click', () => {
+    playChiptune('click');
+    switchMobileTab(btn.dataset.target);
+  });
+});
+
 // Inisialisasi awal saat halaman dimuat
 document.addEventListener('DOMContentLoaded', () => {
-  logMessage('SYSTEM', 'Pixel Emulator siap. Dual-Engine router aktif.', 'info');
-  logMessage('SYSTEM', 'Container FreeJ2ME: #freej2me-container | Container EmulatorJS: #emulatorjs-container', 'info');
+  logMessage('SYSTEM', 'PIXEL EMULATOR STATION v1.2 BOOT COMPLETE.', 'info');
+  logMessage('SYSTEM', 'Core WASM: fceumm (NES), mgba (GBA), snes9x (SNES), gambatte (GB).', 'info');
+  logMessage('SYSTEM', 'Runtime Java ME: FreeJ2ME-web CheerpJ terpasang lokal.', 'info');
 });

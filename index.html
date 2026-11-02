@@ -2,111 +2,134 @@
 <html lang="id">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Pixel Emulator - Multi-engine retro gaming platform supporting Java ME (FreeJ2ME) and Classic Consoles (EmulatorJS).">
-  <title>Pixel Emulator | Multi-Engine Retro Gaming</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+  <meta name="description" content="Pixel Emulator - Retro arcade web portal multi-engine untuk game Java ME (FreeJ2ME) dan konsol klasik (EmulatorJS).">
+  <meta name="theme-color" content="#0a0c16">
+  <title>PIXEL EMULATOR &bull; Retro Arcade Web Station</title>
   
-  <!-- Google Fonts: Outfit & Press Start 2P & JetBrains Mono -->
+  <!-- Retro Gaming Google Fonts: Press Start 2P, Silkscreen, Outfit, JetBrains Mono -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Outfit:wght@400;500;600;700&family=Press+Start+2P&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Outfit:wght@400;500;600;700&family=Press+Start+2P&family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
   
   <!-- Application Stylesheet -->
   <link rel="stylesheet" href="src/css/style.css">
 </head>
-<body>
+<body class="crt-enabled glow-enabled">
 
-  <!-- Top Header Navigation -->
+  <!-- Top Retro Arcade Marquee -->
   <header class="app-header">
     <div class="brand-section">
-      <div class="brand-logo" aria-hidden="true">
-        <svg viewBox="0 0 24 24">
-          <path d="M7 6h10v2H7zm-2 4h14v2H5zm0 4h14v2H5zm2 4h10v2H7z"/>
+      <div class="brand-logo" id="brand-logo" title="Pixel Arcade Chip">
+        <svg viewBox="0 0 24 24" class="pixel-icon">
+          <path d="M4 4h4v4H4zm12 0h4v4h-4zM8 8h8v4H8zm-4 4h4v4H4zm12 0h4v4h-4zM6 16h12v4H6z"/>
         </svg>
       </div>
       <div>
+        <div class="arcade-sub">SYSTEM READY // 1990-2005 ARCHIVE</div>
         <h1 class="brand-title">PIXEL EMULATOR</h1>
       </div>
     </div>
 
-    <!-- Active Engine Status Pill -->
-    <div class="header-status-badge">
+    <!-- Arcade Marquee Status Badge -->
+    <div class="header-status-badge" id="status-pill">
       <span class="status-dot" id="header-status-dot"></span>
-      <span id="header-status-text">Standby - Siap Memuat</span>
+      <span id="header-status-text" class="status-label">STANDBY // READY</span>
+      <span class="badge-coin" id="coin-badge">FREE PLAY</span>
     </div>
 
-    <!-- Header Actions -->
+    <!-- Header Quick Actions -->
     <div class="header-actions">
-      <button class="btn btn-secondary" id="btn-fullscreen" title="Mode Layar Penuh">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
-        </svg>
-        Fullscreen
+      <!-- CRT Scanline Toggle -->
+      <button class="btn btn-arcade-tool active" id="btn-toggle-crt" title="Toggle Efek Layar CRT">
+        <span class="btn-icon">📺</span>
+        <span class="btn-text">CRT</span>
       </button>
+
+      <!-- Retro Chiptune SFX Toggle -->
+      <button class="btn btn-arcade-tool active" id="btn-toggle-sfx" title="Efek Suara Arcade Chiptune">
+        <span class="btn-icon" id="sfx-icon">🔊</span>
+        <span class="btn-text">SFX</span>
+      </button>
+
+      <!-- Fullscreen Toggle -->
+      <button class="btn btn-arcade-tool" id="btn-fullscreen" title="Layar Penuh">
+        <span class="btn-icon">⛶</span>
+        <span class="btn-text">FULL</span>
+      </button>
+
+      <!-- Reset Engine Button -->
       <button class="btn btn-danger" id="btn-reset" title="Hentikan Game & Reset">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M18.36 6.64a9 9 0 1 1-12.73 0M12 2v10"/>
-        </svg>
-        Reset
+        <span class="btn-icon">⏏</span>
+        <span class="btn-text">RESET</span>
       </button>
     </div>
   </header>
 
-  <!-- Main Grid Wrapper -->
+  <!-- Mobile Viewport Navigation Switcher -->
+  <nav class="mobile-nav-tabs" aria-label="Navigasi Tampilan Mobile">
+    <button class="mobile-tab-btn active" data-target="screen-stage">
+      <span>🕹️</span> Monitor
+    </button>
+    <button class="mobile-tab-btn" data-target="controls-sidebar">
+      <span>📂</span> Cartridge
+    </button>
+    <button class="mobile-tab-btn" data-target="telemetry-bar">
+      <span>📟</span> Telemetri
+    </button>
+  </nav>
+
+  <!-- Main Arcade Cabinet Layout -->
   <main class="main-wrapper">
     
-    <!-- Left Sidebar: Controls & File Selectors -->
-    <aside class="sidebar">
+    <!-- Left Sidebar: Cartridge Deck & Controls -->
+    <aside class="sidebar" id="controls-sidebar">
       
-      <!-- Upload File Card -->
-      <section class="card" aria-labelledby="upload-card-title">
+      <!-- Cartridge Slot: File Upload -->
+      <section class="card arcade-card" aria-labelledby="upload-card-title">
+        <div class="card-glow-bar"></div>
         <h2 class="card-title" id="upload-card-title">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
-          </svg>
-          Muat File Game
+          <span class="title-pixel-bullet">►</span>
+          CARTRIDGE SLOT (UPLOAD)
         </h2>
         
         <div class="upload-dropzone" id="dropzone">
           <input type="file" id="game-file-input" class="file-input" accept=".jar,.jad,.nes,.gba,.gb,.gbc,.sfc,.smc,.bin,.gen,.md">
           <div class="dropzone-icon">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="2" y="6" width="20" height="12" rx="2"/>
-              <circle cx="8" cy="12" r="2"/>
-              <path d="M14 10h4m-2-2v4"/>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M4 17l6-6-6-6m8 14l6-6-6-6"/>
             </svg>
           </div>
-          <p class="dropzone-text">Pilih atau Drag & Drop File</p>
-          <p class="dropzone-subtext">Mendukung ROM konsol dan Java ME (.jar)</p>
+          <p class="dropzone-text">MASUKKAN CARTRIDGE / ROM</p>
+          <p class="dropzone-subtext">Drag & drop atau klik untuk memilih file</p>
           
           <div class="format-tags">
-            <span class="badge badge-jar">.JAR (J2ME)</span>
-            <span class="badge badge-rom">.NES</span>
-            <span class="badge badge-rom">.GBA</span>
-            <span class="badge badge-rom">.GB / .GBC</span>
-            <span class="badge badge-rom">.SFC</span>
+            <span class="badge badge-jar">☕ .JAR (J2ME)</span>
+            <span class="badge badge-rom">🎮 .NES</span>
+            <span class="badge badge-rom">🎮 .GBA</span>
+            <span class="badge badge-rom">🎮 .GB/.GBC</span>
+            <span class="badge badge-rom">🎮 .SFC</span>
           </div>
         </div>
       </section>
 
-      <!-- Preset / Quick Demo Launcher -->
-      <section class="card" aria-labelledby="preset-card-title">
+      <!-- Quick Preset Selector (Demo Games) -->
+      <section class="card arcade-card" aria-labelledby="preset-card-title">
+        <div class="card-glow-bar"></div>
         <h2 class="card-title" id="preset-card-title">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polygon points="5 3 19 12 5 21 5 3"/>
-          </svg>
-          Uji Coba Cepat (Presets)
+          <span class="title-pixel-bullet">►</span>
+          QUICK ARCADE SELECTOR
         </h2>
         <div class="select-group">
-          <label for="preset-select" class="dropzone-subtext">Pilih simulasi game untuk menguji router engine:</label>
+          <label for="preset-select" class="dropzone-subtext">Pilih demo ROM/J2ME yang tersedia:</label>
           <select id="preset-select" class="custom-select">
-            <option value="" disabled selected>-- Pilih Demo Game --</option>
-            <optgroup label="Java ME Mobile Games (freej2me-web)">
+            <option value="" disabled selected>-- PILIH PRESET GAME --</option>
+            <optgroup label="☕ Java ME Mobile Games (FreeJ2ME)">
               <option value="bounce_tales.jar">Bounce Tales (Nokia) [.jar]</option>
               <option value="diamond_rush.jar">Diamond Rush (Gameloft) [.jar]</option>
-              <option value="sonic_advance_mobile.jar">Sonic the Hedgehog Mobile [.jar]</option>
+              <option value="sonic_advance_mobile.jar">Sonic Mobile [.jar]</option>
             </optgroup>
-            <optgroup label="Classic Consoles (EmulatorJS)">
+            <optgroup label="🎮 Classic Consoles (EmulatorJS)">
               <option value="super_mario_bros.nes">Super Mario Bros (NES) [.nes]</option>
               <option value="pokemon_emerald.gba">Pokemon Emerald (GBA) [.gba]</option>
               <option value="zelda_minish_cap.gba">The Legend of Zelda (GBA) [.gba]</option>
@@ -114,106 +137,147 @@
               <option value="chrono_trigger.sfc">Chrono Trigger (SNES) [.sfc]</option>
             </optgroup>
           </select>
-          <button class="btn btn-primary btn-block" id="btn-load-preset">
-            Jalankan Game Terpilih
+          <button class="btn btn-arcade-action" id="btn-load-preset">
+            <span class="btn-blink">▶</span> MUAT GAME TERPILIH
           </button>
         </div>
       </section>
 
-      <!-- Metadata & Engine Inspector -->
-      <section class="card" aria-labelledby="info-card-title">
+      <!-- Hardware & Engine Inspector -->
+      <section class="card arcade-card" aria-labelledby="info-card-title">
+        <div class="card-glow-bar"></div>
         <h2 class="card-title" id="info-card-title">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"/>
-            <line x1="12" y1="16" x2="12" y2="12"/>
-            <line x1="12" y1="8" x2="12.01" y2="8"/>
-          </svg>
-          Info Game & Router
+          <span class="title-pixel-bullet">►</span>
+          CHIPSET TELEMETRY
         </h2>
         <div class="meta-list">
           <div class="meta-item">
-            <span class="meta-label">File Game</span>
-            <span class="meta-value" id="meta-filename">-</span>
+            <span class="meta-label">ROM/JAR</span>
+            <span class="meta-value" id="meta-filename">NONE</span>
           </div>
           <div class="meta-item">
-            <span class="meta-label">Ekstensi</span>
-            <span class="meta-value" id="meta-extension">-</span>
+            <span class="meta-label">EXT</span>
+            <span class="meta-value" id="meta-extension">--</span>
           </div>
           <div class="meta-item">
-            <span class="meta-label">Target Engine</span>
-            <span class="meta-value" id="meta-engine">-</span>
+            <span class="meta-label">ROUTED ENGINE</span>
+            <span class="meta-value" id="meta-engine">STANDBY</span>
           </div>
           <div class="meta-item">
-            <span class="meta-label">Core / Driver</span>
-            <span class="meta-value" id="meta-core">-</span>
+            <span class="meta-label">WASM CORE</span>
+            <span class="meta-value" id="meta-core">IDLE</span>
           </div>
+        </div>
+      </section>
+
+      <!-- Controls & Keypad Guide -->
+      <section class="card arcade-card controls-guide-card">
+        <div class="card-glow-bar"></div>
+        <h2 class="card-title">
+          <span class="title-pixel-bullet">►</span>
+          CONTROLLER SCHEME
+        </h2>
+        <div class="controls-pill-grid">
+          <div class="ctrl-pill"><span class="key-cap">D-PAD</span> Arah (Up/Down/Left/Right)</div>
+          <div class="ctrl-pill"><span class="key-cap">ENTER</span> Action / OK / Start</div>
+          <div class="ctrl-pill"><span class="key-cap">Q / W</span> Left &amp; Right Softkeys (J2ME)</div>
+          <div class="ctrl-pill"><span class="key-cap">0 - 9</span> Keypad Telepon (J2ME)</div>
+          <div class="ctrl-pill"><span class="key-cap">ESC</span> Menu / Exit Options</div>
         </div>
       </section>
 
     </aside>
 
-    <!-- Right Center Stage: Screen Viewport & Engine Containers -->
-    <section class="viewport-stage" aria-label="Viewport Emulator">
+    <!-- Center Stage: CRT Arcade Monitor & Viewport -->
+    <section class="viewport-stage" id="screen-stage" aria-label="Layar Arcade Monitor">
       
-      <!-- Emulator Bezel / Frame -->
+      <!-- Retro Arcade Monitor Bezel -->
       <div class="screen-frame" id="screen-frame">
         
-        <!-- Retro CRT Scanline Shader Effect -->
+        <!-- CRT Monitor Bezel Badges & Signal Status -->
+        <div class="bezel-top-bar" aria-hidden="true">
+          <div class="bezel-led-group">
+            <span class="bezel-led led-green" title="Power OK"></span>
+            <span class="bezel-led led-cyan" id="signal-led" title="Video Signal"></span>
+          </div>
+          <div class="bezel-screen-label">PIXELTRON 2000 // RGB TRINITRON</div>
+          <div class="bezel-res-label" id="bezel-fps">60 FPS &bull; 4:3 NTSC</div>
+        </div>
+
+        <!-- CRT Scanline Shader Layer -->
         <div class="crt-overlay" id="crt-overlay" aria-hidden="true"></div>
 
-        <!-- 1. Idle Screen (Ditampilkan saat belum ada game yang dimuat) -->
+        <!-- CRT Phosphor Flicker & Glare Vignette -->
+        <div class="crt-vignette" aria-hidden="true"></div>
+
+        <!-- 1. Idle Screen (Retro Arcade Standby) -->
         <div class="idle-screen" id="idle-screen">
+          <div class="arcade-coin-prompt">★ INSERT ROM OR CHOOSE PRESET ★</div>
           <div class="retro-arcade-art">PIXEL EMULATOR</div>
-          <h3 class="idle-title">Pilih Game untuk Memulai</h3>
+          <div class="idle-system-chip">
+            <span class="chip-label">DUAL-ENGINE ARCHITECTURE</span>
+          </div>
           <p class="idle-description">
-            Sistem otomatis mendeteksi format file dan mengarahkan ke engine yang sesuai secara modular:
+            Sistem otomatis mendeteksi format file dan mengarahkan ke engine yang tepat:
           </p>
 
           <div class="engine-hints">
-            <div class="engine-hint-card">
+            <div class="engine-hint-card j2me-hint">
               <div class="hint-engine-title j2me">
-                <span>☕</span> FreeJ2ME Web
+                <span class="hint-icon">☕</span> FREEJ2ME-WEB
               </div>
-              <p class="hint-desc">Khusus game Java Mobile (ekstensi <strong>.jar</strong> atau <strong>.jad</strong>).</p>
+              <p class="hint-desc">Java 2 Micro Edition (<strong>.jar</strong>, <strong>.jad</strong>) &bull; CheerpJ JVM &bull; M3G 3D</p>
             </div>
 
-            <div class="engine-hint-card">
+            <div class="engine-hint-card ejs-hint">
               <div class="hint-engine-title ejs">
-                <span>🎮</span> EmulatorJS
+                <span class="hint-icon">🕹️</span> EMULATORJS
               </div>
-              <p class="hint-desc">ROM konsol retro (<strong>.nes</strong>, <strong>.gba</strong>, <strong>.gbc</strong>, <strong>.sfc</strong>, dll).</p>
+              <p class="hint-desc">Konsol Retro (<strong>.nes</strong>, <strong>.gba</strong>, <strong>.gbc</strong>, <strong>.sfc</strong>) &bull; WebAssembly Cores</p>
             </div>
           </div>
         </div>
 
         <!-- 2. Container FreeJ2ME-web -->
-        <div class="emulator-container" id="freej2me-container" aria-label="FreeJ2ME Web Container">
+        <div class="emulator-container" id="freej2me-container" aria-label="Container FreeJ2ME-web">
           <div class="engine-canvas-wrap" id="freej2me-viewport">
-            <!-- FreeJ2ME Canvas / iFrame di-inject di sini oleh main.js -->
+            <!-- FreeJ2ME Web iFrame di-inject di sini oleh main.js -->
           </div>
         </div>
 
         <!-- 3. Container EmulatorJS -->
-        <div class="emulator-container" id="emulatorjs-container" aria-label="EmulatorJS Container">
+        <div class="emulator-container" id="emulatorjs-container" aria-label="Container EmulatorJS">
           <div class="engine-canvas-wrap" id="emulatorjs-viewport">
-            <!-- EmulatorJS Canvas / Container di-inject di sini oleh main.js -->
+            <!-- EmulatorJS Canvas di-inject di sini oleh main.js -->
           </div>
         </div>
 
       </div>
 
-      <!-- Realtime Activity Log / Console Bar -->
-      <div class="console-box" id="activity-log" aria-live="polite" aria-label="Log Aktivitas Router">
-        <!-- Log items akan ditambahkan secara dinamis di sini -->
+      <!-- Realtime Activity Log / Terminal Bar -->
+      <div class="console-box" id="telemetry-bar" aria-live="polite" aria-label="Log Terminal Emulator">
+        <div class="console-header">
+          <span class="terminal-title">► TERMINAL TELEMETRY</span>
+          <button class="btn-clear-log" id="btn-clear-log" title="Bersihkan Log">CLEAR</button>
+        </div>
+        <div class="console-logs" id="activity-log">
+          <!-- Log baris ditambahkan oleh main.js -->
+        </div>
       </div>
 
     </section>
 
   </main>
 
-  <!-- Footer -->
+  <!-- Retro Arcade Marquee Bottom Footer -->
   <footer class="app-footer">
-    <p>Pixel Emulator Architecture &bull; Dual Engine (EmulatorJS &amp; FreeJ2ME-web) &bull; Local Git Ready</p>
+    <div class="footer-content">
+      <span>PIXEL EMULATOR STATION v1.2</span>
+      <span class="footer-separator">&bull;</span>
+      <span>EMULATORJS WASM [FCEUMM, MGBA, SNES9X, GAMBATTE]</span>
+      <span class="footer-separator">&bull;</span>
+      <span>FREEJ2ME-WEB CHEERPJ RUNTIME</span>
+    </div>
   </footer>
 
   <!-- Main JavaScript Logic -->

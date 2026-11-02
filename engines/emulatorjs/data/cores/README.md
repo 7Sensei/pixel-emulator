@@ -1,11 +1,11 @@
-# EmulatorJS Core: mgba
+# EmulatorJS Core: gambatte
 
-This package contains the stable EmulatorJS core: mgba
+This package contains the stable EmulatorJS core: gambatte
 
 Lean more about EmulatorJS at https://emulatorjs.org
 
 Core repository:
-https://github.com/EmulatorJS/mgba
+https://github.com/EmulatorJS/gambatte-libretro
 
 Core is build using this repository:
 https://github.com/EmulatorJS/build
@@ -15,7 +15,7 @@ https://github.com/EmulatorJS/build
 To install core, run the following command:
 
 ```bash
-npm install @emulatorjs/core-mgba
+npm install @emulatorjs/core-gambatte
 ```
 To install all cores, run the following command:
 

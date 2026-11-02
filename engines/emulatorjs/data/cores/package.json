@@ -1,16 +1,16 @@
 {
-    "name": "@emulatorjs/core-mgba",
+    "name": "@emulatorjs/core-gambatte",
     "version": "4.2.3",
     "type": "module",
-    "description": "EmulatorJS Core: mgba",
+    "description": "EmulatorJS Core: gambatte",
     "homepage": "https://emulatorjs.org",
-    "license": "LICENSE",
+    "license": "COPYING",
     "repository": {
         "type": "git",
-        "url": "https://github.com/EmulatorJS/mgba.git"
+        "url": "https://github.com/EmulatorJS/gambatte-libretro.git"
     },
     "bugs": {
-        "url": "https://github.com/EmulatorJS/mgba/issues"
+        "url": "https://github.com/EmulatorJS/gambatte-libretro/issues"
     },
     "sideEffects": true,
     "dependencies": {
