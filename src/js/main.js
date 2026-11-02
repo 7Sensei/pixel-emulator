@@ -722,8 +722,12 @@ function renderGameLibrary() {
   }).join('');
 
   // Event listener pada setiap kartu game
-  DOM.gamesGrid.querySelectorAll('.game-card').forEach(card => {
+  DOM.gamesGrid.querySelectorAll('.game-card').forEach((card, idx) => {
     card.addEventListener('click', (e) => {
+      gamepadFocusIndex = idx;
+      DOM.gamesGrid.querySelectorAll('.game-card').forEach(c => c.classList.remove('gamepad-focus'));
+      card.classList.add('gamepad-focus');
+
       const id = card.dataset.id;
       const game = state.gamesLibrary.find(g => g.id === id);
       if (game) {
@@ -741,6 +745,17 @@ function renderGameLibrary() {
       }
     });
   });
+
+  // Pulihkan sorotan fokus gamepad jika ada kartu yang aktif
+  if (gamepadFocusIndex >= 0) {
+    const cards = DOM.gamesGrid.querySelectorAll('.game-card');
+    if (cards.length > 0) {
+      if (gamepadFocusIndex >= cards.length) gamepadFocusIndex = cards.length - 1;
+      cards[gamepadFocusIndex].classList.add('gamepad-focus');
+    } else {
+      gamepadFocusIndex = -1;
+    }
+  }
 }
 
 // ============================================================================
@@ -880,9 +895,134 @@ DOM.mobileTabs.forEach(btn => {
   });
 });
 
+// ============================================================================
+// Web Gamepad API Subsystem (Navigasi Katalog Gamepad)
+// ============================================================================
+let gamepadFocusIndex = -1;
+let lastGamepadNavTime = 0;
+let prevGamepadButtonA = false;
+let isGamepadNavActive = false;
+let connectedGamepadsCount = 0;
+
+function getGridColumnCount(cards) {
+  if (cards.length <= 1) return 1;
+  const firstTop = cards[0].offsetTop;
+  let cols = 0;
+  for (let i = 0; i < cards.length; i++) {
+    if (Math.abs(cards[i].offsetTop - firstTop) < 12) {
+      cols++;
+    } else {
+      break;
+    }
+  }
+  return Math.max(1, cols);
+}
+
+function updateGamepadFocus(newIndex, cards) {
+  if (!cards || cards.length === 0) return;
+  newIndex = Math.max(0, Math.min(cards.length - 1, newIndex));
+
+  cards.forEach(c => c.classList.remove('gamepad-focus'));
+  gamepadFocusIndex = newIndex;
+
+  const targetCard = cards[gamepadFocusIndex];
+  if (targetCard) {
+    targetCard.classList.add('gamepad-focus');
+    targetCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    playChiptune('click');
+  }
+}
+
+function pollGamepad() {
+  const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+  let activeGamepad = null;
+
+  for (let i = 0; i < gamepads.length; i++) {
+    if (gamepads[i] && gamepads[i].connected) {
+      activeGamepad = gamepads[i];
+      break;
+    }
+  }
+
+  // Polling navigasi katalog hanya berjalan saat tidak ada game yang sedang aktif di emulator
+  if (activeGamepad && !state.activeEngine) {
+    const cards = Array.from(DOM.gamesGrid.querySelectorAll('.game-card'));
+    if (cards.length > 0) {
+      const b = activeGamepad.buttons;
+      const axes = activeGamepad.axes;
+
+      // Navigasi D-Pad atau Left Analog Stick
+      const up = (b[12] && b[12].pressed) || (axes[1] !== undefined && axes[1] < -0.5);
+      const down = (b[13] && b[13].pressed) || (axes[1] !== undefined && axes[1] > 0.5);
+      const left = (b[14] && b[14].pressed) || (axes[0] !== undefined && axes[0] < -0.5);
+      const right = (b[15] && b[15].pressed) || (axes[0] !== undefined && axes[0] > 0.5);
+
+      // Tombol A (Xbox) / Cross (PlayStation) - Tombol 0
+      const btnA = Boolean(b[0] && b[0].pressed);
+
+      const now = performance.now();
+      const anyDir = up || down || left || right;
+
+      if (anyDir) {
+        if (!isGamepadNavActive || (now - lastGamepadNavTime > 220)) {
+          isGamepadNavActive = true;
+          lastGamepadNavTime = now;
+
+          if (gamepadFocusIndex < 0 || gamepadFocusIndex >= cards.length) {
+            updateGamepadFocus(0, cards);
+          } else {
+            const cols = getGridColumnCount(cards);
+            let nextIndex = gamepadFocusIndex;
+
+            if (left) nextIndex = Math.max(0, gamepadFocusIndex - 1);
+            else if (right) nextIndex = Math.min(cards.length - 1, gamepadFocusIndex + 1);
+            else if (up) nextIndex = Math.max(0, gamepadFocusIndex - cols);
+            else if (down) nextIndex = Math.min(cards.length - 1, gamepadFocusIndex + cols);
+
+            updateGamepadFocus(nextIndex, cards);
+          }
+        }
+      } else {
+        isGamepadNavActive = false;
+      }
+
+      // Tekan tombol A/Cross untuk memuat game yang sedang disorot
+      if (btnA && !prevGamepadButtonA) {
+        if (gamepadFocusIndex >= 0 && gamepadFocusIndex < cards.length) {
+          const targetCard = cards[gamepadFocusIndex];
+          targetCard.click();
+        }
+      }
+      prevGamepadButtonA = btnA;
+    }
+  }
+
+  requestAnimationFrame(pollGamepad);
+}
+
+function initGamepadSupport() {
+  window.addEventListener('gamepadconnected', (e) => {
+    connectedGamepadsCount++;
+    logMessage('GAMEPAD', `Gamepad terhubung: ${e.gamepad.id} (Port #${e.gamepad.index})`, 'info');
+    playChiptune('coin');
+  });
+
+  window.addEventListener('gamepaddisconnected', (e) => {
+    connectedGamepadsCount = Math.max(0, connectedGamepadsCount - 1);
+    logMessage('GAMEPAD', `Gamepad terputus: ${e.gamepad.id}`, 'warn');
+    if (connectedGamepadsCount === 0) {
+      document.querySelectorAll('.gamepad-focus').forEach(el => el.classList.remove('gamepad-focus'));
+      gamepadFocusIndex = -1;
+    }
+  });
+
+  requestAnimationFrame(pollGamepad);
+}
+
 // Inisialisasi awal saat halaman dimuat
 document.addEventListener('DOMContentLoaded', () => {
   logMessage('SYSTEM', 'PIXEL EMULATOR STATION v1.3 BOOT COMPLETE.', 'info');
-  logMessage('SYSTEM', 'Game Library & Save Data Manager siap.', 'info');
+  logMessage('SYSTEM', 'Game Library, Save Data Manager & Web Gamepad API siap.', 'info');
   loadGameLibrary();
+  initGamepadSupport();
 });

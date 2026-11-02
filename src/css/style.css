@@ -1220,6 +1220,27 @@ body {
   font-weight: 700;
 }
 
+/* Gamepad Focus State (Web Gamepad API Navigation) */
+.game-card.gamepad-focus {
+  transform: translateY(-8px) scale(1.03);
+  border-color: var(--neon-cyan);
+  box-shadow: 0 0 25px rgba(0, 245, 212, 0.55), 0 14px 32px rgba(0, 0, 0, 0.6);
+  outline: 2px solid var(--neon-cyan);
+  outline-offset: 3px;
+  z-index: 5;
+}
+
+.game-card.gamepad-focus .game-card-cover {
+  transform: scale(1.08);
+}
+
+.game-card.gamepad-focus .btn-card-play {
+  background: var(--neon-cyan);
+  color: #03141a;
+  box-shadow: var(--glow-cyan);
+  font-weight: 700;
+}
+
 /* ==========================================================================
    Responsive Adaptations (Tablet & Smartphone)
    ========================================================================== */

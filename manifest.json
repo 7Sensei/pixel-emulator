@@ -1,0 +1,20 @@
+{
+  "name": "Pixel Emulator - Retro Arcade Web Station",
+  "short_name": "Pixel Emulator",
+  "description": "Retro arcade web portal multi-engine untuk game Java ME (FreeJ2ME) dan konsol klasik (EmulatorJS).",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0a0c16",
+  "theme_color": "#0a0c16",
+  "categories": ["games", "entertainment"],
+  "icons": [
+    {
+      "src": "assets/images/icon.svg",
+      "sizes": "192x192 512x512 any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -14,6 +14,11 @@
   
   <!-- Application Stylesheet -->
   <link rel="stylesheet" href="src/css/style.css">
+
+  <!-- Progressive Web App Manifest & Favicon -->
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/svg+xml" href="assets/images/icon.svg">
+  <link rel="apple-touch-icon" href="assets/images/icon.svg">
 </head>
 <body class="crt-enabled glow-enabled">
 
@@ -324,5 +329,20 @@
 
   <!-- Main JavaScript Logic -->
   <script src="src/js/main.js"></script>
+
+  <!-- Service Worker Registration -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+          .then((reg) => {
+            console.log('[PWA] Service Worker aktif dengan scope:', reg.scope);
+          })
+          .catch((err) => {
+            console.warn('[PWA] Pendaftaran Service Worker gagal:', err);
+          });
+      });
+    }
+  </script>
 </body>
 </html>
