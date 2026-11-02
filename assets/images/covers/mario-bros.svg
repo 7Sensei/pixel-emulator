@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" width="100%" height="100%">
+  <defs>
+    <linearGradient id="grad-mario-bros" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#b31217"/>
+      <stop offset="100%" stop-color="#e52521"/>
+    </linearGradient>
+    <pattern id="pixel-grid" width="16" height="16" patternUnits="userSpaceOnUse">
+      <path d="M 16 0 L 0 0 0 16" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>
+    </pattern>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="320" height="200" rx="10" fill="url(#grad-mario-bros)"/>
+  <rect width="320" height="200" rx="10" fill="url(#pixel-grid)"/>
+
+  <!-- Top Badge Banner -->
+  <rect x="0" y="0" width="320" height="28" fill="rgba(0,0,0,0.4)"/>
+  <text x="12" y="19" font-family="'Silkscreen', monospace, sans-serif" font-size="10" font-weight="bold" fill="#fee440" letter-spacing="1">NES CLASSIC</text>
+  <text x="308" y="19" text-anchor="end" font-family="'Silkscreen', monospace, sans-serif" font-size="9" fill="#fff" opacity="0.8">NES ARCADE</text>
+
+  <!-- Big Central Icon & Glow -->
+  <circle cx="160" cy="98" r="42" fill="rgba(0,0,0,0.3)" stroke="#fee440" stroke-width="2" stroke-dasharray="6 3"/>
+  <text x="160" y="112" text-anchor="middle" font-size="38">🍄</text>
+
+  <!-- Bottom Title Plate -->
+  <rect x="12" y="152" width="296" height="36" rx="6" fill="rgba(0,0,0,0.75)" stroke="rgba(255,255,255,0.15)"/>
+  <text x="160" y="174" text-anchor="middle" font-family="'Press Start 2P', monospace, cursive" font-size="11" font-weight="bold" fill="#fff" letter-spacing="0.5">SUPER MARIO BROS.</text>
+</svg>

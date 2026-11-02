@@ -26,7 +26,7 @@
         </svg>
       </div>
       <div>
-        <div class="arcade-sub">SYSTEM READY // 1990-2005 ARCHIVE</div>
+        <div class="arcade-sub">SYSTEM READY // 1990-2008 ARCHIVE</div>
         <h1 class="brand-title">PIXEL EMULATOR</h1>
       </div>
     </div>
@@ -74,6 +74,9 @@
     <button class="mobile-tab-btn" data-target="controls-sidebar">
       <span>📂</span> Cartridge
     </button>
+    <button class="mobile-tab-btn" data-target="library-anchor">
+      <span>📚</span> Katalog
+    </button>
     <button class="mobile-tab-btn" data-target="telemetry-bar">
       <span>📟</span> Telemetri
     </button>
@@ -113,33 +116,30 @@
         </div>
       </section>
 
-      <!-- Quick Preset Selector (Demo Games) -->
-      <section class="card arcade-card" aria-labelledby="preset-card-title">
+      <!-- Save Data Manager (Export / Import) -->
+      <section class="card arcade-card" id="save-manager-card" aria-labelledby="save-card-title">
         <div class="card-glow-bar"></div>
-        <h2 class="card-title" id="preset-card-title">
+        <h2 class="card-title" id="save-card-title">
           <span class="title-pixel-bullet">►</span>
-          QUICK ARCADE SELECTOR
+          SAVE DATA MANAGER
         </h2>
-        <div class="select-group">
-          <label for="preset-select" class="dropzone-subtext">Pilih demo ROM/J2ME yang tersedia:</label>
-          <select id="preset-select" class="custom-select">
-            <option value="" disabled selected>-- PILIH PRESET GAME --</option>
-            <optgroup label="☕ Java ME Mobile Games (FreeJ2ME)">
-              <option value="bounce_tales.jar">Bounce Tales (Nokia) [.jar]</option>
-              <option value="diamond_rush.jar">Diamond Rush (Gameloft) [.jar]</option>
-              <option value="sonic_advance_mobile.jar">Sonic Mobile [.jar]</option>
-            </optgroup>
-            <optgroup label="🎮 Classic Consoles (EmulatorJS)">
-              <option value="super_mario_bros.nes">Super Mario Bros (NES) [.nes]</option>
-              <option value="pokemon_emerald.gba">Pokemon Emerald (GBA) [.gba]</option>
-              <option value="zelda_minish_cap.gba">The Legend of Zelda (GBA) [.gba]</option>
-              <option value="tetris_dx.gbc">Tetris DX (Game Boy Color) [.gbc]</option>
-              <option value="chrono_trigger.sfc">Chrono Trigger (SNES) [.sfc]</option>
-            </optgroup>
-          </select>
-          <button class="btn btn-arcade-action" id="btn-load-preset">
-            <span class="btn-blink">▶</span> MUAT GAME TERPILIH
+        <p class="dropzone-subtext" style="margin-bottom: 0.75rem;">
+          Simpan &amp; pulihkan progres game (.state / .sav / .zip):
+        </p>
+        <div class="save-actions-grid">
+          <button class="btn btn-save-export" id="btn-export-save" title="Export &amp; Unduh Save State Game">
+            <span class="btn-icon">💾</span>
+            <span class="btn-text">EXPORT SAVE</span>
           </button>
+          <button class="btn btn-save-import" id="btn-import-save" title="Import File Save State">
+            <span class="btn-icon">📥</span>
+            <span class="btn-text">IMPORT SAVE</span>
+          </button>
+          <input type="file" id="save-file-input" accept=".state,.sav,.srm,.zip,.dsv" style="display: none;">
+        </div>
+        <div class="save-status-info">
+          <span class="save-label">SAVE SLOT:</span>
+          <span id="save-status-text" class="save-status-text">SIAP // MENUNGGU GAME</span>
         </div>
       </section>
 
@@ -212,13 +212,13 @@
 
         <!-- 1. Idle Screen (Retro Arcade Standby) -->
         <div class="idle-screen" id="idle-screen">
-          <div class="arcade-coin-prompt">★ INSERT ROM OR CHOOSE PRESET ★</div>
+          <div class="arcade-coin-prompt">★ SELECT GAME FROM LIBRARY BELOW OR INSERT ROM ★</div>
           <div class="retro-arcade-art">PIXEL EMULATOR</div>
           <div class="idle-system-chip">
             <span class="chip-label">DUAL-ENGINE ARCHITECTURE</span>
           </div>
           <p class="idle-description">
-            Sistem otomatis mendeteksi format file dan mengarahkan ke engine yang tepat:
+            Pilih game dari katalog di bawah atau seret file ROM/JAR Anda ke slot cartridge untuk langsung mulai bermain:
           </p>
 
           <div class="engine-hints">
@@ -269,14 +269,56 @@
 
   </main>
 
+  <!-- Full-Width Game Library Section -->
+  <section class="game-library-section" id="library-anchor" aria-labelledby="library-heading">
+    <div class="library-container">
+      
+      <div class="library-header-bar">
+        <div class="library-title-group">
+          <div class="library-icon">🎮</div>
+          <div>
+            <div class="library-sub">AUTHENTIC RETRO COLLECTION // INSTANT LOAD</div>
+            <h2 class="library-title" id="library-heading">KATALOG GAME BAWAAN</h2>
+          </div>
+        </div>
+
+        <!-- Search & Filter Tabs -->
+        <div class="library-controls">
+          <div class="search-box">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="library-search" class="search-input" placeholder="Cari judul game..." aria-label="Cari judul game">
+          </div>
+          <div class="category-filters" id="category-filters">
+            <button class="filter-btn active" data-filter="all">SEMUA</button>
+            <button class="filter-btn" data-filter="NES">NES</button>
+            <button class="filter-btn" data-filter="GBA">GBA</button>
+            <button class="filter-btn" data-filter="SNES">SNES</button>
+            <button class="filter-btn" data-filter="GBC">GBC</button>
+            <button class="filter-btn" data-filter="J2ME">JAVA ME</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Dynamic Grid of Games from assets/games.json -->
+      <div class="games-grid" id="games-grid" aria-live="polite">
+        <div class="games-loading-spinner">
+          <span class="btn-blink">▶</span> Memuat Katalog Game...
+        </div>
+      </div>
+
+    </div>
+  </section>
+
   <!-- Retro Arcade Marquee Bottom Footer -->
   <footer class="app-footer">
     <div class="footer-content">
-      <span>PIXEL EMULATOR STATION v1.2</span>
+      <span>PIXEL EMULATOR STATION v1.3</span>
       <span class="footer-separator">&bull;</span>
-      <span>EMULATORJS WASM [FCEUMM, MGBA, SNES9X, GAMBATTE]</span>
+      <span>GAME LIBRARY READY</span>
       <span class="footer-separator">&bull;</span>
-      <span>FREEJ2ME-WEB CHEERPJ RUNTIME</span>
+      <span>SAVE DATA EXPORT / IMPORT SUPPORTED</span>
+      <span class="footer-separator">&bull;</span>
+      <span>EMULATORJS &amp; FREEJ2ME DUAL ENGINE</span>
     </div>
   </footer>
 
