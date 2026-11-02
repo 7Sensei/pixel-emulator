@@ -14,6 +14,8 @@ pixel-emulator/
 ├── engines/                 # File core / build 3rd-party engines
 │   ├── emulatorjs/          # Build file & cores EmulatorJS
 │   └── freej2me/            # Build file & WASM FreeJ2ME Web
+├── scripts/
+│   └── setup-engines.mjs    # Skrip otomatis pengunduh binary/core kedua engine
 ├── roms/                    # Direktori ROM lokal (diabaikan oleh Git)
 ├── src/
 │   ├── css/
@@ -23,6 +25,14 @@ pixel-emulator/
 └── assets/
     ├── audio/               # Efek suara chiptune / UI audio
     └── images/              # Logo, ikon, background, & overlay
+```
+
+## 📦 Mengunduh Binary Core & Engine
+
+Jalankan skrip otomatis untuk mengunduh core WASM EmulatorJS dan runtime FreeJ2ME-web ke dalam folder `engines/`:
+
+```bash
+node scripts/setup-engines.mjs
 ```
 
 ## 🚀 Menjalankan Secara Lokal

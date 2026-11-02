@@ -19,6 +19,9 @@
 *.jar
 *.jad
 
+# Exclude engine runtime binaries from ignore
+!engines/**
+
 # Save files & Emulator States
 *.sav
 *.srm

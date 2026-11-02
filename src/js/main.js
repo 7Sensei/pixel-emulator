@@ -2,15 +2,18 @@
  * ============================================================================
  * Pixel Emulator - Main Router & Integration Engine
  * ============================================================================
- * Menangani pemilihan game, deteksi ekstensi file, dan routing ke container:
+ * Menangani pemilihan game, deteksi format file, dan routing ke container:
  * - .jar / .jad -> Container FreeJ2ME-web
  * - .nes, .gba, .gb, .sfc, dll -> Container EmulatorJS
  */
 
-// Konfigurasi Path Engine Lokal
-const ENGINE_PATHS = {
-  emulatorjs: 'engines/emulatorjs',
-  freej2me: 'engines/freej2me',
+// Konfigurasi Path Engine
+const ENGINE_CONFIG = {
+  // Path data lokal (dapat fallback ke CDN resmi)
+  emulatorjsLocalData: 'engines/emulatorjs/data/',
+  emulatorjsCdnData: 'https://cdn.emulatorjs.org/stable/data/',
+  freej2meWebUrl: 'engines/freej2me/web/index.html',
+  freej2meCdnFallback: 'https://zb3.github.io/freej2me-web/web/',
   romsDir: 'roms'
 };
 
@@ -32,17 +35,18 @@ const EXTENSION_CONFIG = {
   // Sega
   gen: { engine: 'emulatorjs', core: 'segaMD', name: 'Sega Mega Drive / Genesis', badgeClass: 'active-emulatorjs' },
   smd: { engine: 'emulatorjs', core: 'segaMD', name: 'Sega Mega Drive', badgeClass: 'active-emulatorjs' },
-  md:  { engine: 'emulatorjs', core: 'segaMD', name: 'Sega Mega Drive', badgeClass: 'active-emulatorjs' }
+  md:  { engine: 'emulatorjs', core: 'segaMD', name: 'Sega Mega Drive', badgeClass: 'active-emulatorjs' },
+  bin: { engine: 'emulatorjs', core: 'segaMD', name: 'Sega Genesis / Raw ROM', badgeClass: 'active-emulatorjs' }
 };
 
-// State Aplikasi
+// State Global Aplikasi
 const state = {
   activeEngine: null, // 'freej2me' | 'emulatorjs' | null
-  activeGame: null,   // { name, extension, url, fileObject }
+  activeGameFile: null,
   activeBlobUrl: null
 };
 
-// DOM Elements
+// DOM Elements Cache
 const DOM = {
   fileInput: document.getElementById('game-file-input'),
   dropzone: document.getElementById('dropzone'),
@@ -85,14 +89,11 @@ function logMessage(tag, message, type = 'info') {
 }
 
 function escapeHtml(str) {
-  return str.replace(/[&<>'"]/g, tag => ({
+  return String(str).replace(/[&<>'"]/g, tag => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
   }[tag] || tag));
 }
 
-// ============================================================================
-// File & Extension Helpers
-// ============================================================================
 function getExtension(filename) {
   if (!filename || typeof filename !== 'string') return '';
   const parts = filename.split('.');
@@ -116,194 +117,44 @@ function updateHeaderStatus(text, badgeClass = null) {
 }
 
 // ============================================================================
-// Core Router: Memilih Container Berdasarkan Ekstensi
-// ============================================================================
-function routeGame(gameData) {
-  const { name, url, fileObject } = gameData;
-  const ext = getExtension(name);
-  const config = EXTENSION_CONFIG[ext];
-
-  logMessage('ROUTER', `Memeriksa ekstensi file: "${name}" (.${ext})`, 'router');
-
-  if (!config) {
-    logMessage('ERROR', `Format file .${ext} belum didukung sistem.`, 'error');
-    alert(`Format file ".${ext}" belum didukung.\nSilakan pilih file .jar untuk J2ME, atau .nes/.gba/.gb/.sfc untuk EmulatorJS.`);
-    return;
-  }
-
-  // Bersihkan game sebelumnya
-  cleanupActiveEngine();
-
-  // Simpan data state
-  state.activeGame = gameData;
-  state.activeEngine = config.engine;
-  updateMetadata(name, ext, config);
-
-  // Sembunyikan idle screen
-  DOM.idleScreen.classList.add('hidden');
-
-  if (config.engine === 'freej2me') {
-    logMessage('ROUTER', `Ekstensi .${ext} terdeteksi -> Mengarahkan ke Container FreeJ2ME-web`, 'info');
-    updateHeaderStatus(`FreeJ2ME Web Active (${name})`, config.badgeClass);
-    activateFreeJ2MEContainer(name, url, fileObject);
-  } else if (config.engine === 'emulatorjs') {
-    logMessage('ROUTER', `Ekstensi .${ext} terdeteksi -> Mengarahkan ke Container EmulatorJS [Core: ${config.core}]`, 'info');
-    updateHeaderStatus(`EmulatorJS Active [${config.core.toUpperCase()}] (${name})`, config.badgeClass);
-    activateEmulatorJSContainer(name, url, fileObject, config.core);
-  }
-}
-
-// ============================================================================
-// 1. FreeJ2ME-web Engine Loader
-// ============================================================================
-function activateFreeJ2MEContainer(filename, gameUrl, fileObject) {
-  // Aktifkan container DOM
-  DOM.emulatorjsContainer.classList.remove('active');
-  DOM.freej2meContainer.classList.add('active');
-  DOM.freej2meViewport.innerHTML = '';
-
-  logMessage('FREEJ2ME', `Menyiapkan kanvas Java ME untuk: ${filename}`, 'info');
-
-  // Periksa apakah engine build sudah tersedia di server lokal
-  const scriptPath = `${ENGINE_PATHS.freej2me}/freej2me-web.js`;
-
-  // Render wrapper kanvas J2ME
-  DOM.freej2meViewport.innerHTML = `
-    <div style="width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative;">
-      <canvas id="freej2me-canvas" width="240" height="320" style="background: #111; border: 2px solid #fee440; border-radius: 8px; box-shadow: 0 0 20px rgba(254, 228, 64, 0.3); max-height: 90%;"></canvas>
-      <div id="freej2me-overlay-msg" style="position: absolute; bottom: 20px; color: #fee440; font-family: var(--font-mono); font-size: 0.8rem; background: rgba(0,0,0,0.7); padding: 4px 12px; border-radius: 4px;">
-        Container FreeJ2ME Siap &bull; File: ${escapeHtml(filename)}
-      </div>
-    </div>
-  `;
-
-  // Injeksi script atau tampilkan panduan build jika file belum diletakkan
-  checkAndLoadScript(scriptPath, () => {
-    logMessage('FREEJ2ME', `Engine FreeJ2ME-web terdeteksi. Memulai MIDlet loader...`, 'info');
-    if (window.FreeJ2ME && typeof window.FreeJ2ME.start === 'function') {
-      window.FreeJ2ME.start({
-        canvas: document.getElementById('freej2me-canvas'),
-        jarUrl: gameUrl
-      });
-    }
-  }, () => {
-    // Fallback jika file build belum dimasukkan ke engines/freej2me/
-    showEngineNotice(
-      DOM.freej2meViewport,
-      'FreeJ2ME-web Engine Build Belum Terpasang',
-      `File game <strong>${escapeHtml(filename)}</strong> berhasil diarahkan ke container FreeJ2ME. Letakkan hasil build repositori <em>freej2me-web</em> ke dalam folder:`,
-      `${ENGINE_PATHS.freej2me}/ (contoh: freej2me-web.js, freej2me-web.wasm)`
-    );
-  });
-}
-
-// ============================================================================
-// 2. EmulatorJS Engine Loader
-// ============================================================================
-function activateEmulatorJSContainer(filename, gameUrl, fileObject, coreName) {
-  // Aktifkan container DOM
-  DOM.freej2meContainer.classList.remove('active');
-  DOM.emulatorjsContainer.classList.add('active');
-  DOM.emulatorjsViewport.innerHTML = '';
-
-  logMessage('EMU-JS', `Menyiapkan instance EmulatorJS [Core: ${coreName}] untuk: ${filename}`, 'info');
-
-  const loaderScriptPath = `${ENGINE_PATHS.emulatorjs}/data/loader.js`;
-
-  // Buat target div game
-  const gameDiv = document.createElement('div');
-  gameDiv.id = 'game-instance';
-  gameDiv.style.width = '100%';
-  gameDiv.style.height = '100%';
-  DOM.emulatorjsViewport.appendChild(gameDiv);
-
-  // Setup konfigurasi global EmulatorJS (EJS_*)
-  window.EJS_player = '#game-instance';
-  window.EJS_core = coreName;
-  window.EJS_gameUrl = gameUrl;
-  window.EJS_pathtodata = `${ENGINE_PATHS.emulatorjs}/data/`;
-  window.EJS_startOnLoaded = true;
-
-  checkAndLoadScript(loaderScriptPath, () => {
-    logMessage('EMU-JS', `Script loader EmulatorJS berhasil dimuat. Menginisialisasi ROM...`, 'info');
-  }, () => {
-    // Fallback jika file core belum dimasukkan ke engines/emulatorjs/
-    showEngineNotice(
-      DOM.emulatorjsViewport,
-      'EmulatorJS Core Belum Terpasang',
-      `File ROM <strong>${escapeHtml(filename)}</strong> berhasil diarahkan ke container EmulatorJS (Core: <code>${coreName}</code>). Letakkan file build repositori <em>EmulatorJS</em> ke dalam folder:`,
-      `${ENGINE_PATHS.emulatorjs}/ (contoh: data/loader.js, cores/${coreName}.wasm)`
-    );
-  });
-}
-
-// ============================================================================
-// Helper: Deteksi Script dan Tampilkan Notice
-// ============================================================================
-function checkAndLoadScript(src, onSuccess, onFail) {
-  // Tes apakah script dapat di-fetch secara lokal
-  fetch(src, { method: 'HEAD' })
-    .then(res => {
-      if (res.ok) {
-        const s = document.createElement('script');
-        s.src = src;
-        s.onload = onSuccess;
-        s.onerror = onFail;
-        document.body.appendChild(s);
-      } else {
-        onFail();
-      }
-    })
-    .catch(() => {
-      onFail();
-    });
-}
-
-function showEngineNotice(container, title, description, path) {
-  const noticeBox = document.createElement('div');
-  noticeBox.className = 'core-notice-box';
-  noticeBox.innerHTML = `
-    <div class="core-notice-title">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="10"/>
-        <line x1="12" y1="8" x2="12" y2="12"/>
-        <line x1="12" y1="16" x2="12.01" y2="16"/>
-      </svg>
-      ${escapeHtml(title)}
-    </div>
-    <div class="core-notice-body">
-      ${description}
-      <div class="core-notice-path">${escapeHtml(path)}</div>
-    </div>
-    <div style="font-size: 0.75rem; color: #8c9bb5;">
-      <em>Logika routing router bekerja dengan sempurna. Tampilan ini otomatis digantikan oleh emulator sesaat setelah file engine diletakkan.</em>
-    </div>
-  `;
-  container.appendChild(noticeBox);
-}
-
-// ============================================================================
-// Reset & Cleanup
+// Cleanup & Reset Function
 // ============================================================================
 function cleanupActiveEngine() {
+  // Hapus object URL lama agar tidak membocorkan memori
   if (state.activeBlobUrl) {
     URL.revokeObjectURL(state.activeBlobUrl);
     state.activeBlobUrl = null;
   }
 
-  // Bersihkan viewports
+  // Hentikan instance EmulatorJS jika sedang aktif
+  if (window.EJS_emulator && typeof window.EJS_emulator.destroy === 'function') {
+    try {
+      window.EJS_emulator.destroy();
+    } catch (e) {
+      console.warn('EJS destroy warning:', e);
+    }
+  }
+
+  // Hapus script loader EmulatorJS yang lama
+  const oldScript = document.getElementById('ejs-loader-script');
+  if (oldScript) oldScript.remove();
+
+  // Bersihkan objek global EmulatorJS
+  delete window.EJS_player;
+  delete window.EJS_core;
+  delete window.EJS_gameUrl;
+  delete window.EJS_gameName;
+  delete window.EJS_pathtodata;
+  delete window.EJS_emulator;
+
+  // Bersihkan konten viewport DOM
   DOM.freej2meViewport.innerHTML = '';
   DOM.emulatorjsViewport.innerHTML = '';
   DOM.freej2meContainer.classList.remove('active');
   DOM.emulatorjsContainer.classList.remove('active');
 
-  // Bersihkan variabel global EmulatorJS
-  delete window.EJS_player;
-  delete window.EJS_core;
-  delete window.EJS_gameUrl;
-
   state.activeEngine = null;
-  state.activeGame = null;
+  state.activeGameFile = null;
 }
 
 function resetToIdle() {
@@ -311,36 +162,247 @@ function resetToIdle() {
   DOM.idleScreen.classList.remove('hidden');
   updateMetadata(null, null, null);
   updateHeaderStatus('Standby - Siap Memuat', null);
-  logMessage('SYSTEM', 'Emulator di-reset ke kondisi standby.', 'warn');
+  logMessage('SYSTEM', 'Emulator di-reset ke kondisi awal.', 'warn');
 }
 
 // ============================================================================
-// Event Listeners: File Upload, Presets & Controls
+// 1. Implementasi Container EmulatorJS
 // ============================================================================
-function handleFileSelect(file) {
+/**
+ * Menginisialisasi dan merender ROM konsol menggunakan engine EmulatorJS.
+ * Mendefinisikan objek konfigurasi global EJS_player, EJS_pathtodata, EJS_gameUrl.
+ *
+ * @param {File|Blob|string} gameFile - File objek dari input atau path string ROM.
+ * @param {string} coreName - Nama sistem core EmulatorJS ('nes', 'gba', 'gb', 'snes', dll).
+ */
+async function activateEmulatorJSContainer(gameFile, coreName) {
+  logMessage('EMU-JS', `Memulai aktivasi container EmulatorJS [Core: ${coreName}]...`, 'info');
+
+  // Bersihkan engine yang sedang berjalan sebelumnya
+  cleanupActiveEngine();
+
+  // Tentukan nama file dan URL game
+  let gameUrl = '';
+  let gameName = '';
+
+  if (gameFile instanceof File || gameFile instanceof Blob) {
+    gameUrl = URL.createObjectURL(gameFile);
+    state.activeBlobUrl = gameUrl;
+    gameName = gameFile.name || `game.${coreName}`;
+  } else if (typeof gameFile === 'string') {
+    gameUrl = gameFile;
+    gameName = gameFile.split('/').pop();
+  }
+
+  state.activeEngine = 'emulatorjs';
+  state.activeGameFile = gameFile;
+
+  // Siapkan tampilan viewport
+  DOM.idleScreen.classList.add('hidden');
+  DOM.freej2meContainer.classList.remove('active');
+  DOM.emulatorjsContainer.classList.add('active');
+
+  // Buat elemen target div untuk canvas EmulatorJS
+  DOM.emulatorjsViewport.innerHTML = `
+    <div id="ejs-game-target" style="width: 100%; height: 100%; position: relative;"></div>
+  `;
+
+  // Cek apakah loader lokal di engines/emulatorjs/data/ tersedia
+  let pathToData = ENGINE_CONFIG.emulatorjsLocalData;
+  try {
+    const checkRes = await fetch(`${pathToData}loader.js`, { method: 'HEAD' });
+    if (!checkRes.ok) {
+      logMessage('EMU-JS', 'Loader lokal tidak ditemukan, menggunakan CDN resmi (https://cdn.emulatorjs.org)...', 'warn');
+      pathToData = ENGINE_CONFIG.emulatorjsCdnData;
+    } else {
+      logMessage('EMU-JS', `Menggunakan asset core lokal di: ${pathToData}`, 'info');
+    }
+  } catch {
+    logMessage('EMU-JS', 'Memakai fallback CDN resmi EmulatorJS...', 'info');
+    pathToData = ENGINE_CONFIG.emulatorjsCdnData;
+  }
+
+  // Definisikan variabel konfigurasi global EmulatorJS (EJS_*)
+  window.EJS_player = '#ejs-game-target';
+  window.EJS_core = coreName;
+  window.EJS_gameUrl = gameUrl;
+  window.EJS_gameName = gameName;
+  window.EJS_pathtodata = pathToData;
+  window.EJS_startOnLoaded = true;
+  window.EJS_color = '#00f5d4';
+  window.EJS_alignStartButton = 'center';
+
+  logMessage('EMU-JS', `EJS_player = "${window.EJS_player}", Core = "${coreName}", ROM = "${gameName}"`, 'info');
+
+  // Muat skrip loader.js untuk menginisialisasi canvas dan WebAssembly
+  const script = document.createElement('script');
+  script.id = 'ejs-loader-script';
+  script.src = `${pathToData}loader.js`;
+
+  script.onload = () => {
+    logMessage('EMU-JS', `Script loader berhasil dimuat. Render canvas ROM sedang dimulai...`, 'info');
+  };
+
+  script.onerror = () => {
+    logMessage('ERROR', `Gagal memuat loader script dari: ${script.src}`, 'error');
+  };
+
+  document.body.appendChild(script);
+}
+
+// ============================================================================
+// 2. Implementasi Container FreeJ2ME-web
+// ============================================================================
+/**
+ * Menginisialisasi dan merender game Java ME (.jar) menggunakan FreeJ2ME-web.
+ * Menghubungkan file ke launcher kanvas CheerpJ / FreeJ2ME.
+ *
+ * @param {File|Blob|string} gameFile - File objek .jar atau path string.
+ */
+async function activateFreeJ2MEContainer(gameFile) {
+  logMessage('FREEJ2ME', `Memulai aktivasi container FreeJ2ME-web...`, 'info');
+
+  // Bersihkan engine sebelumnya
+  cleanupActiveEngine();
+
+  let gameName = '';
+  if (gameFile instanceof File || gameFile instanceof Blob) {
+    gameName = gameFile.name || 'game.jar';
+  } else if (typeof gameFile === 'string') {
+    gameName = gameFile.split('/').pop();
+  }
+
+  state.activeEngine = 'freej2me';
+  state.activeGameFile = gameFile;
+
+  // Siapkan tampilan viewport
+  DOM.idleScreen.classList.add('hidden');
+  DOM.emulatorjsContainer.classList.remove('active');
+  DOM.freej2meContainer.classList.add('active');
+
+  // Cek apakah build web lokal di engines/freej2me/web/index.html tersedia
+  let playerUrl = ENGINE_CONFIG.freej2meWebUrl;
+  try {
+    const res = await fetch(playerUrl, { method: 'HEAD' });
+    if (!res.ok) {
+      logMessage('FREEJ2ME', 'Player lokal tidak ditemukan, menggunakan fallback hosted web player...', 'warn');
+      playerUrl = ENGINE_CONFIG.freej2meCdnFallback;
+    } else {
+      logMessage('FREEJ2ME', `Menggunakan runtime lokal FreeJ2ME di: ${playerUrl}`, 'info');
+    }
+  } catch {
+    playerUrl = ENGINE_CONFIG.freej2meCdnFallback;
+  }
+
+  // Buat iFrame terisolasi untuk CheerpJ runtime
+  const iframe = document.createElement('iframe');
+  iframe.id = 'freej2me-iframe';
+  iframe.src = playerUrl;
+  iframe.style.width = '100%';
+  iframe.style.height = '100%';
+  iframe.style.border = 'none';
+  iframe.style.borderRadius = '12px';
+  iframe.setAttribute('allow', 'autoplay; fullscreen');
+  iframe.setAttribute('title', 'FreeJ2ME Web Player');
+
+  DOM.freej2meViewport.innerHTML = '';
+  DOM.freej2meViewport.appendChild(iframe);
+
+  logMessage('FREEJ2ME', `Container iFrame terpasang. Menunggu inisialisasi CheerpJ...`, 'info');
+
+  // Ketika iFrame siap, suntikkan file .jar yang dipilih langsung ke input form launcher FreeJ2ME
+  iframe.onload = async () => {
+    logMessage('FREEJ2ME', `iFrame FreeJ2ME berhasil dimuat.`, 'info');
+
+    try {
+      // Karena disajikan dari local server yang sama (same origin), kita dapat mengakses dokumen iframe
+      const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+      const targetInput = iframeDoc.getElementById('game-file-input');
+
+      if (!targetInput) {
+        logMessage('FREEJ2ME', `Player FreeJ2ME siap. Silakan operasikan kontrol pada kanvas.`, 'info');
+        return;
+      }
+
+      // 1. Jika pengguna mengunggah objek File asli (.jar)
+      if (gameFile instanceof File) {
+        const dataTransfer = new DataTransfer();
+        dataTransfer.items.add(gameFile);
+        targetInput.files = dataTransfer.files;
+        targetInput.dispatchEvent(new Event('change', { bubbles: true }));
+        logMessage('FREEJ2ME', `File JAR "${gameName}" langsung disuntikkan ke launcher FreeJ2ME.`, 'info');
+      } 
+      // 2. Jika memilih preset string URL, unduh blob-nya lalu suntikkan
+      else if (typeof gameFile === 'string') {
+        try {
+          const fetchRes = await fetch(gameFile);
+          if (fetchRes.ok) {
+            const blob = await fetchRes.blob();
+            const fileObj = new File([blob], gameName, { type: 'application/java-archive' });
+            const dataTransfer = new DataTransfer();
+            dataTransfer.items.add(fileObj);
+            targetInput.files = dataTransfer.files;
+            targetInput.dispatchEvent(new Event('change', { bubbles: true }));
+            logMessage('FREEJ2ME', `Preset "${gameName}" berhasil diunduh dan diproses ke kanvas FreeJ2ME.`, 'info');
+          } else {
+            logMessage('FREEJ2ME', `File preset lokal "${gameName}" belum ada di folder roms/. Launcher siap untuk drag-and-drop manual.`, 'warn');
+          }
+        } catch (fetchErr) {
+          logMessage('FREEJ2ME', `Launcher siap di iFrame. Silakan masukkan file JAR secara manual.`, 'info');
+        }
+      }
+    } catch (crossErr) {
+      // Terjadi jika iframe berasal dari origin berbeda (misal fallback ke URL luar)
+      logMessage('FREEJ2ME', `Player FreeJ2ME aktif di viewport. Anda dapat langsung mengunggah file di dalam kanvas player.`, 'info');
+    }
+  };
+}
+
+// ============================================================================
+// Main Router
+// ============================================================================
+function routeGame(gameFile, filenameOverride = null) {
+  const filename = filenameOverride || (gameFile instanceof File ? gameFile.name : String(gameFile));
+  const ext = getExtension(filename);
+  const config = EXTENSION_CONFIG[ext];
+
+  logMessage('ROUTER', `Menganalisis file: "${filename}" (ekstensi .${ext})`, 'router');
+
+  if (!config) {
+    logMessage('ERROR', `Format file .${ext} belum didukung oleh sistem.`, 'error');
+    alert(`Format file ".${ext}" belum didukung.\nSilakan pilih file .jar untuk J2ME, atau .nes/.gba/.gb/.sfc untuk EmulatorJS.`);
+    return;
+  }
+
+  // Perbarui UI Metadata & Status
+  updateMetadata(filename, ext, config);
+
+  if (config.engine === 'freej2me') {
+    updateHeaderStatus(`FreeJ2ME Active: ${filename}`, config.badgeClass);
+    activateFreeJ2MEContainer(gameFile);
+  } else if (config.engine === 'emulatorjs') {
+    updateHeaderStatus(`EmulatorJS Active [${config.core.toUpperCase()}]: ${filename}`, config.badgeClass);
+    activateEmulatorJSContainer(gameFile, config.core);
+  }
+}
+
+// ============================================================================
+// Event Listeners: Input Form, Presets, Controls
+// ============================================================================
+function handleFileInput(file) {
   if (!file) return;
-
-  logMessage('SYSTEM', `File lokal dipilih: "${file.name}" (${(file.size / 1024).toFixed(1)} KB)`, 'info');
-
-  // Buat Object URL sementara untuk file lokal
-  const objectUrl = URL.createObjectURL(file);
-  state.activeBlobUrl = objectUrl;
-
-  routeGame({
-    name: file.name,
-    url: objectUrl,
-    fileObject: file
-  });
+  logMessage('SYSTEM', `File dipilih dari input: "${file.name}" (${(file.size / 1024).toFixed(1)} KB)`, 'info');
+  routeGame(file);
 }
 
 // Input file biasa
 DOM.fileInput.addEventListener('change', (e) => {
   if (e.target.files && e.target.files[0]) {
-    handleFileSelect(e.target.files[0]);
+    handleFileInput(e.target.files[0]);
   }
 });
 
-// Drag & Drop
+// Drag and drop ke area dropzone
 DOM.dropzone.addEventListener('dragover', (e) => {
   e.preventDefault();
   DOM.dropzone.classList.add('dragover');
@@ -354,24 +416,21 @@ DOM.dropzone.addEventListener('drop', (e) => {
   e.preventDefault();
   DOM.dropzone.classList.remove('dragover');
   if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-    handleFileSelect(e.dataTransfer.files[0]);
+    handleFileInput(e.dataTransfer.files[0]);
   }
 });
 
-// Preset Game Selector
+// Pemilihan preset demo
 DOM.btnLoadPreset.addEventListener('click', () => {
   const selected = DOM.presetSelect.value;
   if (!selected) {
-    alert('Pilih salah satu demo game dari dropdown terlebih dahulu.');
+    alert('Pilih salah satu demo game dari daftar terlebih dahulu.');
     return;
   }
 
-  logMessage('SYSTEM', `Preset game dipilih: "${selected}"`, 'info');
-  routeGame({
-    name: selected,
-    url: `${ENGINE_PATHS.romsDir}/${selected}`,
-    fileObject: null
-  });
+  const romPath = `${ENGINE_CONFIG.romsDir}/${selected}`;
+  logMessage('SYSTEM', `Menjalankan preset: "${selected}"`, 'info');
+  routeGame(romPath, selected);
 });
 
 // Tombol Reset
@@ -381,15 +440,15 @@ DOM.btnReset.addEventListener('click', resetToIdle);
 DOM.btnFullscreen.addEventListener('click', () => {
   if (!document.fullscreenElement) {
     DOM.screenFrame.requestFullscreen().catch(err => {
-      logMessage('ERROR', `Gagal masuk fullscreen: ${err.message}`, 'error');
+      logMessage('ERROR', `Gagal masuk layar penuh: ${err.message}`, 'error');
     });
   } else {
     document.exitFullscreen();
   }
 });
 
-// Inisialisasi awal
+// Inisialisasi awal saat halaman dimuat
 document.addEventListener('DOMContentLoaded', () => {
-  logMessage('SYSTEM', 'Pixel Emulator diinisialisasi. Dual-engine router siap.', 'info');
+  logMessage('SYSTEM', 'Pixel Emulator siap. Dual-Engine router aktif.', 'info');
   logMessage('SYSTEM', 'Container FreeJ2ME: #freej2me-container | Container EmulatorJS: #emulatorjs-container', 'info');
 });
