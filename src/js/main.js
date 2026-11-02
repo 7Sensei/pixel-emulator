@@ -434,8 +434,10 @@ async function activateFreeJ2MEContainer(gameFile) {
           logMessage('FREEJ2ME', `Silakan unggah file JAR secara manual di kanvas player.`, 'info');
         }
       }
-    } catch {
-      logMessage('FREEJ2ME', `Player aktif di viewport.`, 'info');
+    } catch (err) {
+      logMessage('WARN', `Akses iFrame dibatasi oleh CORS: ${err.message}`, 'warn');
+      DOM.saveStatusText.textContent = 'KLIK BROWSE DI KANAN';
+      alert('Karena pembatasan CORS pada iFrame eksternal, silakan klik tombol "Browse" secara manual di dalam layar emulator.');
     }
   };
 }
