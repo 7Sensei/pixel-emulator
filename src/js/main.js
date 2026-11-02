@@ -260,31 +260,43 @@ async function activateEmulatorJSContainer(gameFile, coreName) {
 
   cleanupActiveEngine();
 
+  // === 1. Siapkan URL sumber ROM ===
   let gameUrl = '';
   let gameName = '';
 
   if (gameFile instanceof File || gameFile instanceof Blob) {
+    // KRITIS: Bungkus File object menjadi Blob URL agar bisa di-fetch oleh engine
     gameUrl = URL.createObjectURL(gameFile);
     state.activeBlobUrl = gameUrl;
     gameName = gameFile.name || `game.${coreName}`;
+    logMessage('EMU-JS', `Blob URL dibuat: ${gameUrl.substring(0, 60)}...`, 'info');
   } else if (typeof gameFile === 'string') {
     gameUrl = gameFile;
     gameName = gameFile.split('/').pop();
+  }
+
+  if (!gameUrl) {
+    logMessage('ERROR', 'Gagal mendapatkan URL ROM. File tidak valid.', 'error');
+    return;
   }
 
   state.activeEngine = 'emulatorjs';
   state.activeGameFile = gameFile;
   state.activeGameName = gameName;
 
+  // === 2. Tampilkan container & inject target div ===
   DOM.idleScreen.classList.add('hidden');
   DOM.freej2meContainer.classList.remove('active');
   DOM.emulatorjsContainer.classList.add('active');
 
-  DOM.emulatorjsViewport.innerHTML = `
-    <div id="ejs-game-target" style="width: 100%; height: 100%; position: relative;"></div>
-  `;
+  // Bersihkan dan buat elemen target dengan display eksplisit
+  DOM.emulatorjsViewport.innerHTML = '';
+  const ejsTarget = document.createElement('div');
+  ejsTarget.id = 'ejs-game-target';
+  ejsTarget.style.cssText = 'width:100%;height:100%;position:relative;display:block;background:#000;';
+  DOM.emulatorjsViewport.appendChild(ejsTarget);
 
-  // Cek ketersediaan loader lokal
+  // === 3. Cek ketersediaan loader lokal ===
   let pathToData = ENGINE_CONFIG.emulatorjsLocalData;
   try {
     const checkRes = await fetch(`${pathToData}loader.js`, { method: 'HEAD' });
@@ -299,10 +311,10 @@ async function activateEmulatorJSContainer(gameFile, coreName) {
     pathToData = ENGINE_CONFIG.emulatorjsCdnData;
   }
 
-  // Definisikan objek global EmulatorJS
+  // === 4. Set semua variabel global EmulatorJS SEBELUM script diinject ===
   window.EJS_player = '#ejs-game-target';
   window.EJS_core = coreName;
-  window.EJS_gameUrl = gameUrl;
+  window.EJS_gameUrl = gameUrl;          // <-- Blob URL, bukan nama file string
   window.EJS_gameName = gameName;
   window.EJS_pathtodata = pathToData;
   window.EJS_startOnLoaded = true;
@@ -312,18 +324,34 @@ async function activateEmulatorJSContainer(gameFile, coreName) {
   DOM.saveStatusText.textContent = `AKTIF [${coreName.toUpperCase()}]`;
   DOM.saveStatusText.className = 'save-status-text';
 
-  logMessage('EMU-JS', `EJS_player = "${window.EJS_player}", Core = "${coreName}", ROM = "${gameName}"`, 'info');
+  logMessage('EMU-JS', `Config: player="${window.EJS_player}", core="${coreName}", url="${gameUrl.substring(0,50)}..."`, 'info');
 
+  // === 5. KRITIS: Tunggu browser flush layout/paint sebelum inject script ===
+  // Double-RAF memastikan elemen #ejs-game-target sudah ter-render di DOM
+  // sebelum loader.js menjalankan querySelector-nya.
+  await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+  // Verifikasi elemen benar-benar ada di DOM
+  const targetEl = document.getElementById('ejs-game-target');
+  if (!targetEl) {
+    logMessage('ERROR', 'Elemen #ejs-game-target tidak ditemukan di DOM. Abort.', 'error');
+    return;
+  }
+
+  logMessage('EMU-JS', `Target DOM siap. Menginjeksi loader script dari: ${pathToData}`, 'info');
+
+  // === 6. Inject script loader.js ===
   const script = document.createElement('script');
   script.id = 'ejs-loader-script';
   script.src = `${pathToData}loader.js`;
 
   script.onload = () => {
-    logMessage('EMU-JS', `Script loader berhasil dimuat. Render canvas ROM dimulai.`, 'info');
+    logMessage('EMU-JS', `Loader.js berhasil dimuat. Canvas emulator sedang dirender...`, 'info');
   };
 
   script.onerror = () => {
-    logMessage('ERROR', `Gagal memuat loader script dari: ${script.src}`, 'error');
+    logMessage('ERROR', `Gagal memuat loader.js dari: ${script.src}`, 'error');
+    alert(`Gagal memuat EmulatorJS engine.\nCoba periksa koneksi internet Anda atau letakkan engine di folder engines/emulatorjs/data/`);
   };
 
   document.body.appendChild(script);

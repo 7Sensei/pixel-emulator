@@ -763,12 +763,11 @@ body {
   display: none;
   background: #000;
   z-index: 10;
-  padding-top: 32px; /* space for bezel top bar */
 }
 
 .emulator-container.active {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   justify-content: center;
 }
 
@@ -779,15 +778,17 @@ body {
   align-items: center;
   justify-content: center;
   position: relative;
+  overflow: hidden;
 }
 
 .engine-canvas-wrap iframe, 
 .engine-canvas-wrap canvas,
-.engine-canvas-wrap div#ejs-game-target {
+.engine-canvas-wrap > div {
   width: 100% !important;
   height: 100% !important;
   border: none;
   outline: none;
+  display: block;
 }
 
 /* ==========================================================================
