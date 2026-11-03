@@ -155,6 +155,11 @@ async function launchJarBuffer(buffer, name, options = null) {
             ? { ...options }
             : detectJarResolution(buffer, name || cleanName);
 
+        // Jika opsi rotate ditentukan secara eksplisit ('on' atau 'off'), utamakan selalu
+        if (options && options.rotate) {
+            resConfig.rotate = options.rotate;
+        }
+
         // Jika mode auto, cek juga dari Java loader properties jika ada
         if (!options || !options.width) {
             try {
