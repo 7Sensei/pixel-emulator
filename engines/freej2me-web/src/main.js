@@ -33,7 +33,86 @@ let FreeJ2ME = null;
 let cheerpjReady = false;
 let pendingJar = null;
 
-async function launchJarBuffer(buffer, name) {
+function detectJarResolution(buffer, filename) {
+    let width = 240;
+    let height = 320;
+    let rotate = 'off';
+
+    const fn = (filename || '').toLowerCase();
+
+    // 1. Cek dari nama file (contoh: 320x240, 240x320, 360x640, 640x360, 480x800, 800x480, 240x400, 400x240, 176x220)
+    const fnMatch = fn.match(/(\d{3})[x_](\d{3})/);
+    if (fnMatch) {
+        const w = parseInt(fnMatch[1], 10);
+        const h = parseInt(fnMatch[2], 10);
+        if (w >= 120 && w <= 1920 && h >= 120 && h <= 1920) {
+            width = w;
+            height = h;
+            console.log(`[FreeJ2ME] Resolusi terdeteksi dari nama file: ${width}x${height}`);
+            return { width, height, rotate };
+        }
+    }
+
+    // 2. Cek apakah nama file menunjukkan game landscape Nokia E61/E71/E72 atau build Gameloft landscape
+    // Note: 259065 adalah kode rilis Assassin's Creed Revelations landscape untuk Nokia E71/E72!
+    if (fn.includes('landscape') || fn.includes('land') || fn.includes('horiz') || 
+        fn.includes('e61') || fn.includes('e71') || fn.includes('e72') ||
+        fn.includes('259065') || fn.includes('320x240') || fn.includes('320_240')) {
+        width = 320;
+        height = 240;
+        console.log(`[FreeJ2ME] Orientasi landscape terdeteksi dari nama file / kode rilis: 320x240`);
+        return { width, height, rotate };
+    }
+
+    // 3. Scan isi buffer JAR (mencari MANIFEST.MF teks)
+    try {
+        const bytes = new Uint8Array(buffer);
+        const scanLength = Math.min(bytes.length, 65536);
+        let text = '';
+        for (let i = 0; i < scanLength; i++) {
+            const ch = bytes[i];
+            if ((ch >= 32 && ch <= 126) || ch === 10 || ch === 13) {
+                text += String.fromCharCode(ch);
+            } else if (text.length > 0 && text[text.length - 1] !== ' ') {
+                text += ' ';
+            }
+        }
+
+        // Cek pola resolusi di manifest: Nokia-MIDlet-Original-Display-Size: 320,240
+        const dispMatch = text.match(/Display-Size[:\s]+(\d{3})[,xX_](\d{3})/i);
+        if (dispMatch) {
+            width = parseInt(dispMatch[1], 10);
+            height = parseInt(dispMatch[2], 10);
+            console.log(`[FreeJ2ME] Resolusi terdeteksi dari Display-Size: ${width}x${height}`);
+            return { width, height, rotate };
+        }
+
+        const screenMatch = text.match(/Screen-(?:Width|Height)[:\s]+(\d{3})/gi);
+        if (screenMatch && screenMatch.length >= 2) {
+            const wM = text.match(/Screen-Width[:\s]+(\d{3})/i);
+            const hM = text.match(/Screen-Height[:\s]+(\d{3})/i);
+            if (wM && hM) {
+                width = parseInt(wM[1], 10);
+                height = parseInt(hM[1], 10);
+                console.log(`[FreeJ2ME] Resolusi terdeteksi dari Screen-Width/Height: ${width}x${height}`);
+                return { width, height, rotate };
+            }
+        }
+
+        if (/orientation[:\s]+landscape/i.test(text)) {
+            width = 320;
+            height = 240;
+            console.log(`[FreeJ2ME] Orientasi landscape terdeteksi dari manifest: 320x240`);
+            return { width, height, rotate };
+        }
+    } catch (e) {
+        console.warn('[FreeJ2ME] Gagal scan manifest untuk resolusi:', e);
+    }
+
+    return { width, height, rotate };
+}
+
+async function launchJarBuffer(buffer, name, options = null) {
     if (isLaunching) {
         console.warn('[FreeJ2ME] Game is already launching, ignoring duplicate call');
         return;
@@ -55,6 +134,55 @@ async function launchJarBuffer(buffer, name) {
         await launcherUtil.copyJar(new Int8Array(buffer), jarFile);
         const jarPath = await jarFile.getPath();
 
+        // 1. Tentukan resolusi & orientasi (override options atau auto-detect)
+        const resConfig = (options && options.width && options.height)
+            ? options
+            : detectJarResolution(buffer, name || cleanName);
+        
+        console.log(`[FreeJ2ME] Menerapkan konfigurasi layar: ${resConfig.width}x${resConfig.height}, rotate=${resConfig.rotate || 'off'}`);
+
+        // 2. Tulis settings.conf untuk appId agar FreeJ2ME memulai dengan resolusi yang tepat
+        let appId = cleanName.replace(/\.[^/.]+$/, '');
+        try {
+            const MIDletLoader = await lib.org.recompile.mobile.MIDletLoader;
+            const loader = await MIDletLoader.getMIDletLoader(jarFile);
+            await launcherUtil.ensureAppId(loader, cleanName);
+            const foundId = await loader.getAppId();
+            if (foundId) appId = foundId;
+            await loader.close();
+        } catch (e) {
+            console.warn('[FreeJ2ME] Gagal membaca appId dari loader:', e);
+        }
+
+        const settingsContent = 
+            `width: ${resConfig.width}\n` +
+            `height: ${resConfig.height}\n` +
+            `rotate: ${resConfig.rotate || 'off'}\n` +
+            `sound: on\n` +
+            `phone: Nokia\n` +
+            `fps: 0\n`;
+
+        const writeConf = async (relPath) => {
+            try {
+                const confFile = await new File(relPath);
+                const parent = await confFile.getParentFile();
+                if (parent) await parent.mkdirs();
+                const fos = await new (await lib.java.io.FileOutputStream)(confFile);
+                await fos.write(new Int8Array(new TextEncoder().encode(settingsContent)));
+                await fos.close();
+            } catch (e) {
+                console.warn(`[FreeJ2ME] Gagal tulis ke ${relPath}:`, e);
+            }
+        };
+
+        await writeConf(`/files/${appId}/config/settings.conf`);
+        if (cleanName !== appId) {
+            await writeConf(`/files/${cleanName}/config/settings.conf`);
+        }
+        await writeConf(`/files/config/settings.conf`);
+        await writeConf(`/files/_tmp/config/settings.conf`);
+        console.log(`[FreeJ2ME] settings.conf berhasil diterapkan untuk "${appId}" (${resConfig.width}x${resConfig.height}, rotate=${resConfig.rotate || 'off'})`);
+
         console.log('[FreeJ2ME] Menjalankan JAR:', jarPath);
 
         if (loadingEl) {
@@ -74,13 +202,13 @@ async function launchJarBuffer(buffer, name) {
 
 window.addEventListener('message', async (e) => {
     if (!e.data) return;
-    const { type, buffer, name } = e.data;
+    const { type, buffer, name, options } = e.data;
     if (type === 'LOAD_JAR' || type === 'PIXEL_EMU_LOAD_JAR') {
         if (!buffer || buffer.byteLength === 0) return;
         if (cheerpjReady) {
-            await launchJarBuffer(buffer, name || 'game.jar');
+            await launchJarBuffer(buffer, name || 'game.jar', options);
         } else {
-            pendingJar = { buffer, name: name || 'game.jar' };
+            pendingJar = { buffer, name: name || 'game.jar', options };
         }
     }
 });
@@ -407,9 +535,9 @@ async function init() {
     cheerpjReady = true;
 
     if (pendingJar) {
-        const { buffer, name } = pendingJar;
+        const { buffer, name, options } = pendingJar;
         pendingJar = null;
-        await launchJarBuffer(buffer, name);
+        await launchJarBuffer(buffer, name, options);
     } else if (sp.get('app')) {
         const app = sp.get('app');
         await ensureAppInstalled(lib, app);

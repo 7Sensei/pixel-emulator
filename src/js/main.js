@@ -38,14 +38,24 @@ const EXTENSION_CONFIG = {
   bin: { engine: 'emulatorjs', core: 'segaMD', name: 'Sega Genesis / Raw ROM', badgeClass: 'active-emulatorjs' }
 };
 
+// Preset Orientasi & Resolusi J2ME
+const J2ME_MODES = [
+  { id: 'auto', label: 'AUTO', width: null, height: null, rotate: 'off' },
+  { id: 'landscape', label: '320×240 (LANDSCAPE)', width: 320, height: 240, rotate: 'off' },
+  { id: 'rotated_90', label: 'ROTASI 90°', width: 240, height: 320, rotate: 'on' },
+  { id: 'portrait', label: '240×320 (PORTRAIT)', width: 240, height: 320, rotate: 'off' },
+  { id: 'wide_touch', label: '360×640 (WIDE)', width: 360, height: 640, rotate: 'off' }
+];
+
 // State Global Aplikasi
 const state = {
-  activeEngine: null, // 'j2me-core' | 'emulatorjs' | null
+  activeEngine: null, // 'freej2me' | 'emulatorjs' | null
   activeGameFile: null,
   activeGameName: 'NONE',
   activeBlobUrl: null,
   sfxEnabled: true,
   crtEnabled: true,
+  j2meModeIndex: 0,
   gamesLibrary: [],
   selectedCategory: 'all',
   searchQuery: ''
@@ -114,6 +124,8 @@ const DOM = {
   fileInput: document.getElementById('game-file-input'),
   dropzone: document.getElementById('dropzone'),
   btnFullscreen: document.getElementById('btn-fullscreen'),
+  btnToggleRotate: document.getElementById('btn-toggle-rotate'),
+  rotateBtnText: document.getElementById('rotate-btn-text'),
   btnReset: document.getElementById('btn-reset'),
   btnToggleCrt: document.getElementById('btn-toggle-crt'),
   btnToggleSfx: document.getElementById('btn-toggle-sfx'),
@@ -204,7 +216,7 @@ function updateHeaderStatus(text, badgeClass = null) {
 // ============================================================================
 // Cleanup & Reset Function
 // ============================================================================
-function cleanupActiveEngine() {
+function cleanupActiveEngine(keepJ2meMode = false) {
   if (state.activeBlobUrl) {
     URL.revokeObjectURL(state.activeBlobUrl);
     state.activeBlobUrl = null;
@@ -236,6 +248,11 @@ function cleanupActiveEngine() {
   state.activeEngine = null;
   state.activeGameFile = null;
   state.activeGameName = 'NONE';
+
+  if (!keepJ2meMode) {
+    state.j2meModeIndex = 0;
+    if (DOM.rotateBtnText) DOM.rotateBtnText.textContent = 'ROTATE';
+  }
 
   DOM.saveStatusText.textContent = 'SIAP // MENUNGGU GAME';
   DOM.saveStatusText.className = 'save-status-text';
@@ -356,11 +373,11 @@ async function activateEmulatorJSContainer(gameFile, coreName) {
 // ============================================================================
 // 2. Container J2ME-Web-Core (Java ME MIDlets)
 // ============================================================================
-async function activateJ2MEContainer(gameFile) {
+async function activateJ2MEContainer(gameFile, customMode = null) {
   logMessage('J2ME', `Memulai container FreeJ2ME (CheerpJ WebAssembly)...`, 'info');
   playChiptune('start');
 
-  cleanupActiveEngine();
+  cleanupActiveEngine(Boolean(customMode));
 
   let gameName = '';
   if (gameFile instanceof File || gameFile instanceof Blob) {
@@ -372,6 +389,11 @@ async function activateJ2MEContainer(gameFile) {
   state.activeEngine = 'freej2me';
   state.activeGameFile = gameFile;
   state.activeGameName = gameName;
+
+  if (!customMode) {
+    state.j2meModeIndex = 0;
+    if (DOM.rotateBtnText) DOM.rotateBtnText.textContent = 'ROTATE';
+  }
 
   DOM.idleScreen.classList.add('hidden');
   DOM.emulatorjsContainer.classList.remove('active');
@@ -414,6 +436,7 @@ async function activateJ2MEContainer(gameFile) {
     return;
   }
 
+  const modeToSend = customMode || (state.j2meModeIndex > 0 ? J2ME_MODES[state.j2meModeIndex] : null);
   logMessage('J2ME', `JAR "${gameName}" (${(buffer.byteLength/1024).toFixed(1)} KB) siap. Menunggu runtime FreeJ2ME...`, 'info');
 
   let jarSent = false;
@@ -423,7 +446,7 @@ async function activateJ2MEContainer(gameFile) {
       if (iframe.contentWindow) {
         jarSent = true;
         iframe.contentWindow.postMessage(
-          { type: 'LOAD_JAR', buffer: buffer.slice(0), name: gameName },
+          { type: 'LOAD_JAR', buffer: buffer.slice(0), name: gameName, options: modeToSend },
           '*'
         );
         DOM.saveStatusText.textContent = 'JAVA RUNNING';
@@ -952,6 +975,26 @@ DOM.btnFullscreen.addEventListener('click', () => {
     document.exitFullscreen();
   }
 });
+
+// J2ME Orientation & Resolution Switcher (Portrait 240x320 / Landscape 320x240 / Rotasi 90°)
+if (DOM.btnToggleRotate) {
+  DOM.btnToggleRotate.addEventListener('click', () => {
+    playChiptune('click');
+    if (state.activeEngine !== 'freej2me' || !state.activeGameFile) {
+      alert('Pilih dan jalankan game J2ME terlebih dahulu untuk mengubah orientasi/resolusi layar.');
+      return;
+    }
+
+    state.j2meModeIndex = (state.j2meModeIndex + 1) % J2ME_MODES.length;
+    const currentMode = J2ME_MODES[state.j2meModeIndex];
+    if (DOM.rotateBtnText) {
+      DOM.rotateBtnText.textContent = currentMode.label.split(' ')[0];
+    }
+    logMessage('J2ME', `Mengubah orientasi/resolusi layar ke: ${currentMode.label}`, 'info');
+
+    activateJ2MEContainer(state.activeGameFile, currentMode);
+  });
+}
 
 // CRT Scanlines Toggle
 DOM.btnToggleCrt.addEventListener('click', () => {
