@@ -49,25 +49,11 @@ async function launchJarBuffer(buffer, name) {
 
         const File = await lib.java.io.File;
         const launcherUtil = await lib.pl.zb3.freej2me.launcher.LauncherUtil;
-        const MIDletLoader = await lib.org.recompile.mobile.MIDletLoader;
 
         const cleanName = (name || 'game.jar').replace(/[^a-zA-Z0-9._-]/g, '_');
         const jarFile = await new File("/files/_tmp/" + cleanName);
         await launcherUtil.copyJar(new Int8Array(buffer), jarFile);
         const jarPath = await jarFile.getPath();
-
-        // Bersihkan app lama jika nama/appId sama untuk mencegah FileAlreadyExistsException
-        try {
-            const loader = await MIDletLoader.getMIDletLoader(jarFile);
-            await launcherUtil.ensureAppId(loader, jarFile.getName());
-            const appId = await loader.getAppId();
-            if (appId) {
-                console.log('[FreeJ2ME] Uninstalling previous app version:', appId);
-                await launcherUtil.uninstallApp(appId);
-            }
-        } catch (cleanErr) {
-            console.warn('[FreeJ2ME] Uninstall check warning:', cleanErr);
-        }
 
         console.log('[FreeJ2ME] Menjalankan JAR:', jarPath);
 
@@ -75,19 +61,13 @@ async function launchJarBuffer(buffer, name) {
             loadingEl.textContent = "Menjalankan Java MIDlet...";
         }
 
-        FreeJ2ME.main(['jar', jarPath]).catch(e => {
-            console.error('[FreeJ2ME Main Error]:', e);
-            if (loadingEl) {
-                loadingEl.hidden = false;
-                loadingEl.textContent = 'Gagal menjalankan game. Periksa log konsol.';
-            }
-        });
+        await FreeJ2ME.main(['jar', jarPath]);
     } catch (err) {
-        console.error('[FreeJ2ME] Gagal menyiapkan JAR:', err);
+        console.error('[FreeJ2ME] Gagal menjalankan JAR:', err);
         const loadingEl = document.getElementById("loading");
         if (loadingEl) {
             loadingEl.hidden = false;
-            loadingEl.textContent = 'Error: ' + (err.message || err);
+            loadingEl.textContent = 'Gagal menjalankan game: ' + (err.message || err);
         }
     }
 }
@@ -407,11 +387,6 @@ async function init() {
     FreeJ2ME = await lib.org.recompile.freej2me.FreeJ2ME;
     cheerpjReady = true;
 
-    // Beritahu parent window bahwa engine siap menerima file JAR
-    try {
-        window.parent.postMessage({ type: 'FREEJ2ME_READY' }, '*');
-    } catch (e) {}
-
     if (pendingJar) {
         const { buffer, name } = pendingJar;
         pendingJar = null;
@@ -419,17 +394,14 @@ async function init() {
     } else if (sp.get('app')) {
         const app = sp.get('app');
         await ensureAppInstalled(lib, app);
-        FreeJ2ME.main(['app', app]).catch(e => {
-            e.printStackTrace();
-            document.getElementById('loading').textContent = 'Crash :(';
-        });
+        await FreeJ2ME.main(['app', app]);
     } else if (sp.get('jar')) {
-        FreeJ2ME.main(['jar', cheerpjWebRoot+"/jar/" + sp.get('jar')]).catch(e => {
-            e.printStackTrace();
-            document.getElementById('loading').textContent = 'Crash :(';
-        });
+        await FreeJ2ME.main(['jar', cheerpjWebRoot+"/jar/" + sp.get('jar')]);
     } else {
         document.getElementById("loading").textContent = "☕ FREEJ2ME JVM SIAP // MASUKKAN .JAR";
+        try {
+            window.parent.postMessage({ type: 'FREEJ2ME_READY' }, '*');
+        } catch (e) {}
     }
 
 
