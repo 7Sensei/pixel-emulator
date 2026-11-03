@@ -40,11 +40,12 @@ const EXTENSION_CONFIG = {
 
 // Preset Orientasi & Resolusi J2ME
 const J2ME_MODES = [
-  { id: 'auto', label: 'AUTO', width: null, height: null, rotate: 'off' },
-  { id: 'landscape', label: '320×240 (LANDSCAPE)', width: 320, height: 240, rotate: 'off' },
-  { id: 'rotated_90', label: 'ROTASI 90°', width: 240, height: 320, rotate: 'on' },
-  { id: 'portrait', label: '240×320 (PORTRAIT)', width: 240, height: 320, rotate: 'off' },
-  { id: 'wide_touch', label: '360×640 (WIDE)', width: 360, height: 640, rotate: 'off' }
+  { id: 'auto', label: 'AUTO', shortLabel: 'AUTO', width: null, height: null, rotate: 'off' },
+  { id: 'landscape', label: '320×240 (LANDSCAPE)', shortLabel: '320×240', width: 320, height: 240, rotate: 'off' },
+  { id: 'portrait', label: '240×320 (PORTRAIT)', shortLabel: '240×320', width: 240, height: 320, rotate: 'off' },
+  { id: 'wide_touch', label: '360×640 (WIDE TOUCH)', shortLabel: '360×640', width: 360, height: 640, rotate: 'off' },
+  { id: 'wide_land', label: '400×240 (WIDE LAND)', shortLabel: '400×240', width: 400, height: 240, rotate: 'off' },
+  { id: 'rotated_90', label: 'ROTASI 90°', shortLabel: 'ROTASI 90°', width: 240, height: 320, rotate: 'on' }
 ];
 
 // State Global Aplikasi
@@ -393,6 +394,8 @@ async function activateJ2MEContainer(gameFile, customMode = null) {
   if (!customMode) {
     state.j2meModeIndex = 0;
     if (DOM.rotateBtnText) DOM.rotateBtnText.textContent = 'ROTATE';
+  } else if (DOM.rotateBtnText) {
+    DOM.rotateBtnText.textContent = customMode.shortLabel;
   }
 
   DOM.idleScreen.classList.add('hidden');
@@ -988,7 +991,7 @@ if (DOM.btnToggleRotate) {
     state.j2meModeIndex = (state.j2meModeIndex + 1) % J2ME_MODES.length;
     const currentMode = J2ME_MODES[state.j2meModeIndex];
     if (DOM.rotateBtnText) {
-      DOM.rotateBtnText.textContent = currentMode.label.split(' ')[0];
+      DOM.rotateBtnText.textContent = currentMode.shortLabel;
     }
     logMessage('J2ME', `Mengubah orientasi/resolusi layar ke: ${currentMode.label}`, 'info');
 

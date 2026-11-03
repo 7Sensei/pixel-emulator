@@ -128,32 +128,79 @@ async function launchJarBuffer(buffer, name, options = null) {
 
         const File = await lib.java.io.File;
         const launcherUtil = await lib.pl.zb3.freej2me.launcher.LauncherUtil;
+        const HashMap = await lib.java.util.HashMap;
 
         const cleanName = (name || 'game.jar').replace(/[^a-zA-Z0-9._-]/g, '_');
         const jarFile = await new File("/files/_tmp/" + cleanName);
         await launcherUtil.copyJar(new Int8Array(buffer), jarFile);
         const jarPath = await jarFile.getPath();
 
-        // 1. Tentukan resolusi & orientasi (override options atau auto-detect)
-        const resConfig = (options && options.width && options.height)
-            ? options
-            : detectJarResolution(buffer, name || cleanName);
-        
-        console.log(`[FreeJ2ME] Menerapkan konfigurasi layar: ${resConfig.width}x${resConfig.height}, rotate=${resConfig.rotate || 'off'}`);
+        // 1. Dapatkan MIDletLoader untuk membaca manifest & appId sebenarnya
+        const MIDletLoader = await lib.org.recompile.mobile.MIDletLoader;
+        const loader = await MIDletLoader.getMIDletLoader(jarFile);
+        await launcherUtil.ensureAppId(loader, cleanName);
 
-        // 2. Tulis settings.conf untuk appId agar FreeJ2ME memulai dengan resolusi yang tepat
-        let appId = cleanName.replace(/\.[^/.]+$/, '');
+        let appId = null;
         try {
-            const MIDletLoader = await lib.org.recompile.mobile.MIDletLoader;
-            const loader = await MIDletLoader.getMIDletLoader(jarFile);
-            await launcherUtil.ensureAppId(loader, cleanName);
-            const foundId = await loader.getAppId();
-            if (foundId) appId = foundId;
-            await loader.close();
-        } catch (e) {
-            console.warn('[FreeJ2ME] Gagal membaca appId dari loader:', e);
+            appId = await loader.getAppId();
+        } catch (e) {}
+        if (!appId) {
+            appId = cleanName.replace(/\.[^/.]+$/, '');
         }
 
+        console.log(`[FreeJ2ME] App ID terdeteksi: "${appId}"`);
+
+        // 2. Tentukan resolusi & orientasi (override options atau auto-detect)
+        let resConfig = (options && options.width && options.height)
+            ? { ...options }
+            : detectJarResolution(buffer, name || cleanName);
+
+        // Jika mode auto, cek juga dari Java loader properties jika ada
+        if (!options || !options.width) {
+            try {
+                const props = loader.properties;
+                if (props) {
+                    const dispSize = await props.get("Nokia-MIDlet-Original-Display-Size") || 
+                                     await props.get("Nokia-MIDlet-Target-Display-Size") ||
+                                     await props.get("MIDlet-Screen-Size");
+                    if (dispSize) {
+                        const m = String(dispSize).match(/(\d{3})[,xX_](\d{3})/);
+                        if (m) {
+                            resConfig.width = parseInt(m[1], 10);
+                            resConfig.height = parseInt(m[2], 10);
+                            console.log(`[FreeJ2ME] Resolusi dari manifest properti: ${resConfig.width}x${resConfig.height}`);
+                        }
+                    }
+                }
+            } catch (e) {
+                console.warn('[FreeJ2ME] Gagal membaca properti manifest:', e);
+            }
+        }
+
+        console.log(`[FreeJ2ME] Menerapkan konfigurasi layar: ${resConfig.width}x${resConfig.height}, rotate=${resConfig.rotate || 'off'}`);
+
+        // 3. Buat Java HashMap untuk appSettings
+        const settingsMap = await new HashMap();
+        await settingsMap.put("width", String(resConfig.width));
+        await settingsMap.put("height", String(resConfig.height));
+        await settingsMap.put("rotate", String(resConfig.rotate || 'off'));
+        await settingsMap.put("sound", "on");
+        await settingsMap.put("phone", "Nokia");
+        await settingsMap.put("fps", "0");
+
+        // 4. Inisialisasi app dan simpan konfigurasi menggunakan saveApp
+        const targetJar = await new File(appId + "/app.jar");
+        const alreadyInstalled = await targetJar.exists();
+        if (alreadyInstalled) {
+            console.log(`[FreeJ2ME] App "${appId}" sudah terpasang. Memperbarui pengaturan...`);
+            await launcherUtil.saveApp(appId, settingsMap, null, null);
+        } else {
+            console.log(`[FreeJ2ME] Memasang app baru "${appId}"...`);
+            await launcherUtil.initApp(jarFile, loader, settingsMap, null, null);
+            await launcherUtil.saveApp(appId, settingsMap, null, null);
+        }
+
+        // Tulis juga settings.conf langsung ke disk virtual di semua kemungkinan path
         const settingsContent = 
             `width: ${resConfig.width}\n` +
             `height: ${resConfig.height}\n` +
@@ -170,26 +217,33 @@ async function launchJarBuffer(buffer, name, options = null) {
                 const fos = await new (await lib.java.io.FileOutputStream)(confFile);
                 await fos.write(new Int8Array(new TextEncoder().encode(settingsContent)));
                 await fos.close();
-            } catch (e) {
-                console.warn(`[FreeJ2ME] Gagal tulis ke ${relPath}:`, e);
-            }
+            } catch (e) {}
         };
 
+        await writeConf(`${appId}/config/settings.conf`);
+        await writeConf(`./${appId}/config/settings.conf`);
+        await writeConf(`/${appId}/config/settings.conf`);
         await writeConf(`/files/${appId}/config/settings.conf`);
         if (cleanName !== appId) {
+            await writeConf(`${cleanName}/config/settings.conf`);
+            await writeConf(`./${cleanName}/config/settings.conf`);
             await writeConf(`/files/${cleanName}/config/settings.conf`);
         }
-        await writeConf(`/files/config/settings.conf`);
-        await writeConf(`/files/_tmp/config/settings.conf`);
-        console.log(`[FreeJ2ME] settings.conf berhasil diterapkan untuk "${appId}" (${resConfig.width}x${resConfig.height}, rotate=${resConfig.rotate || 'off'})`);
 
-        console.log('[FreeJ2ME] Menjalankan JAR:', jarPath);
+        console.log(`[FreeJ2ME] settings.conf berhasil diterapkan untuk "${appId}" (${resConfig.width}x${resConfig.height}, rotate=${resConfig.rotate || 'off'})`);
 
         if (loadingEl) {
             loadingEl.textContent = "Menjalankan Java MIDlet...";
         }
 
-        await FreeJ2ME.main(['jar', jarPath]);
+        // Jalankan game menggunakan mode 'app' (menjamin config appId terbaca tanpa exception)
+        if (await targetJar.exists()) {
+            console.log(`[FreeJ2ME] Menjalankan app "${appId}"...`);
+            await FreeJ2ME.main(['app', appId]);
+        } else {
+            console.log('[FreeJ2ME] Menjalankan JAR langsung:', jarPath);
+            await FreeJ2ME.main(['jar', jarPath]);
+        }
     } catch (err) {
         console.error('[FreeJ2ME] Gagal menjalankan JAR:', err);
         const loadingEl = document.getElementById("loading");
@@ -197,6 +251,8 @@ async function launchJarBuffer(buffer, name, options = null) {
             loadingEl.hidden = false;
             loadingEl.textContent = 'Gagal menjalankan game: ' + (err.message || err);
         }
+    } finally {
+        isLaunching = false;
     }
 }
 
