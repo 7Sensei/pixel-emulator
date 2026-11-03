@@ -90,7 +90,7 @@ const keyRepeatManager = new KeyRepeatManager();
 window.evtQueue = evtQueue;
 
 function autoscale() {
-    if (!scaleSet) return;
+    if (!scaleSet || !screenCtx || !screenCtx.canvas) return;
 
     let screenWidth = window.innerWidth;
     let screenHeight = window.innerHeight;
@@ -102,27 +102,44 @@ function autoscale() {
         if (screenWidth > screenHeight) {
             document.body.classList.add('kbd-landscape');
             document.body.classList.remove('kbd-portrait');
-            screenWidth = screenWidth - 2*kbdWidth;
+            screenWidth = Math.max(10, screenWidth - 2 * kbdWidth);
         } else {
             document.body.classList.add('kbd-portrait');
             document.body.classList.remove('kbd-landscape');
-            screenHeight = screenHeight - kbdHeight;
+            screenHeight = Math.max(10, screenHeight - kbdHeight);
         }
     }
 
+    const cw = screenCtx.canvas.width;
+    const ch = screenCtx.canvas.height;
+    if (!cw || !ch) return;
+
+    // Hitung skala terbaik agar pas memenuhi area layar secara adaptif (portrait atau landscape)
+    // tanpa melar atau terpotong
     let scale = Math.min(
-        screenWidth/screenCtx.canvas.width,
-        screenHeight/screenCtx.canvas.height
+        screenWidth / cw,
+        screenHeight / ch
     );
 
-    if (!fractionScale) {
-        scale = Math.max(1, scale|0);
-    }
     if (scale <= 0) scale = 1;
 
     currentZoom = scale;
-    display.style.width = Math.round(screenCtx.canvas.width * scale) + 'px';
-    display.style.height = Math.round(screenCtx.canvas.height * scale) + 'px';
+    display.style.width = Math.round(cw * scale) + 'px';
+    display.style.height = Math.round(ch * scale) + 'px';
+    display.style.maxWidth = '100%';
+    display.style.maxHeight = '100%';
+    display.style.objectFit = 'contain';
+}
+
+function getCanvasCoords(clientX, clientY) {
+    if (!display || !screenCtx || !screenCtx.canvas) return { x: 0, y: 0 };
+    const rect = display.getBoundingClientRect();
+    const cw = screenCtx.canvas.width;
+    const ch = screenCtx.canvas.height;
+    if (!rect.width || !rect.height) return { x: 0, y: 0 };
+    const x = Math.max(0, Math.min(cw - 1, Math.round((clientX - rect.left) * (cw / rect.width))));
+    const y = Math.max(0, Math.min(ch - 1, Math.round((clientY - rect.top) * (ch / rect.height))));
+    return { x, y };
 }
 
 function setListeners() {
@@ -172,14 +189,13 @@ function setListeners() {
         display.focus();
         if (noMouse) return;
 
+        const { x, y } = getCanvasCoords(e.clientX, e.clientY);
         evtQueue.queueEvent({
             kind: 'pointerpressed',
-            x: (e.offsetX / currentZoom) | 0,
-            y: (e.offsetY / currentZoom) | 0,
+            x, y
         });
 
         mouseDown = true;
-
         e.preventDefault();
     });
 
@@ -187,10 +203,10 @@ function setListeners() {
         if (noMouse) return;
         if (!mouseDown) return;
 
+        const { x, y } = getCanvasCoords(e.clientX, e.clientY);
         evtQueue.queueEvent({
             kind: 'pointerdragged',
-            x: (e.offsetX / currentZoom) | 0,
-            y: (e.offsetY / currentZoom) | 0,
+            x, y
         });
 
         e.preventDefault();
@@ -202,10 +218,10 @@ function setListeners() {
 
         mouseDown = false;
 
+        const { x, y } = getCanvasCoords(e.clientX, e.clientY);
         evtQueue.queueEvent({
             kind: 'pointerreleased',
-            x: ((e.pageX - display.offsetLeft) / currentZoom) | 0,
-            y: ((e.pageY - display.offsetTop) / currentZoom) | 0,
+            x, y
         });
 
         e.preventDefault();
@@ -216,10 +232,11 @@ function setListeners() {
         display.focus();
         noMouse = true;
 
+        const touch = e.changedTouches[0];
+        const { x, y } = getCanvasCoords(touch.clientX, touch.clientY);
         evtQueue.queueEvent({
             kind: 'pointerpressed',
-            x: ((e.changedTouches[0].pageX - display.offsetLeft) / currentZoom) | 0,
-            y: ((e.changedTouches[0].pageY - display.offsetTop) / currentZoom) | 0,
+            x, y
         });
 
         e.preventDefault();
@@ -228,10 +245,11 @@ function setListeners() {
     display.addEventListener('touchmove', async e => {
         noMouse = true;
 
+        const touch = e.changedTouches[0];
+        const { x, y } = getCanvasCoords(touch.clientX, touch.clientY);
         evtQueue.queueEvent({
             kind: 'pointerdragged',
-            x: ((e.changedTouches[0].pageX - display.offsetLeft) / currentZoom) | 0,
-            y: ((e.changedTouches[0].pageY - display.offsetTop) / currentZoom) | 0,
+            x, y
         });
 
         e.preventDefault();
@@ -240,10 +258,11 @@ function setListeners() {
     display.addEventListener('touchend', async e => {
         noMouse = true;
 
+        const touch = e.changedTouches[0];
+        const { x, y } = getCanvasCoords(touch.clientX, touch.clientY);
         evtQueue.queueEvent({
             kind: 'pointerreleased',
-            x: ((e.changedTouches[0].pageX - display.offsetLeft) / currentZoom) | 0,
-            y: ((e.changedTouches[0].pageY - display.offsetTop) / currentZoom) | 0,
+            x, y
         });
 
         e.preventDefault();

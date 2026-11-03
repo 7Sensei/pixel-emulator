@@ -771,6 +771,49 @@ body {
   justify-content: center;
 }
 
+/* FreeJ2ME Dedicated Container (Flexbox Centered, Responsive Aspect Ratio) */
+#freej2me-container {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: none;
+  background-color: #000;
+  z-index: 10;
+}
+
+#freej2me-container.active {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: #000;
+}
+
+#freej2me-viewport {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: #000;
+  overflow: hidden;
+}
+
+#freej2me-viewport iframe,
+#freej2me-container iframe,
+#j2me-player {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  aspect-ratio: auto !important;
+  border: none !important;
+  outline: none !important;
+  display: block !important;
+  background-color: #000 !important;
+}
+
 .engine-canvas-wrap {
   width: 100%;
   height: 100%;
