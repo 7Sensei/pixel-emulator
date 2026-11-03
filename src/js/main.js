@@ -416,16 +416,20 @@ async function activateJ2MEContainer(gameFile) {
 
   logMessage('J2ME', `JAR "${gameName}" (${(buffer.byteLength/1024).toFixed(1)} KB) siap. Menunggu runtime FreeJ2ME...`, 'info');
 
+  let jarSent = false;
   const sendJar = () => {
+    if (jarSent) return;
     try {
       if (iframe.contentWindow) {
-        // Gunakan buffer.slice(0) tanpa transfer list agar tidak menjadi detached buffer saat re-try
+        jarSent = true;
         iframe.contentWindow.postMessage(
           { type: 'LOAD_JAR', buffer: buffer.slice(0), name: gameName },
           '*'
         );
+        DOM.saveStatusText.textContent = 'JAVA RUNNING';
       }
     } catch (err) {
+      jarSent = false;
       console.warn('postMessage JAR error:', err);
     }
   };
@@ -435,17 +439,14 @@ async function activateJ2MEContainer(gameFile) {
     if (e.data && e.data.type === 'FREEJ2ME_READY') {
       logMessage('J2ME', `FreeJ2ME siap. Mengirim payload JAR "${gameName}"...`, 'info');
       sendJar();
-      DOM.saveStatusText.textContent = 'JAVA RUNNING';
     }
   };
-  window.addEventListener('message', readyHandler);
+  window.addEventListener('message', readyHandler, { once: true });
 
-  // Fallback pengiriman saat iframe onload selesai
+  // Fallback jika sinyal ready terlewat
   iframe.onload = () => {
-    DOM.saveStatusText.textContent = 'MEMUAT GAME...';
-    sendJar();
-    setTimeout(sendJar, 800);
-    setTimeout(sendJar, 2000);
+    DOM.saveStatusText.textContent = 'MEMUAT JVM J2ME...';
+    setTimeout(() => { if (!jarSent) sendJar(); }, 1200);
   };
 
   iframe.onerror = () => {

@@ -25,6 +25,8 @@ let screenCtx = null;
 
 let fractionScale = sp.get('fractionScale') || (localStorage && localStorage.getItem("pl.zb3.freej2me.fractionScale") === "true");
 let scaleSet = false;
+let currentZoom = 1;
+let isLaunching = false;
 
 let lib = null;
 let FreeJ2ME = null;
@@ -32,6 +34,12 @@ let cheerpjReady = false;
 let pendingJar = null;
 
 async function launchJarBuffer(buffer, name) {
+    if (isLaunching) {
+        console.warn('[FreeJ2ME] Game is already launching, ignoring duplicate call');
+        return;
+    }
+    isLaunching = true;
+
     try {
         const loadingEl = document.getElementById("loading");
         if (loadingEl) {
@@ -41,11 +49,26 @@ async function launchJarBuffer(buffer, name) {
 
         const File = await lib.java.io.File;
         const launcherUtil = await lib.pl.zb3.freej2me.launcher.LauncherUtil;
+        const MIDletLoader = await lib.org.recompile.mobile.MIDletLoader;
 
         const cleanName = (name || 'game.jar').replace(/[^a-zA-Z0-9._-]/g, '_');
         const jarFile = await new File("/files/_tmp/" + cleanName);
         await launcherUtil.copyJar(new Int8Array(buffer), jarFile);
         const jarPath = await jarFile.getPath();
+
+        // Bersihkan app lama jika nama/appId sama untuk mencegah FileAlreadyExistsException
+        try {
+            const loader = await MIDletLoader.getMIDletLoader(jarFile);
+            await launcherUtil.ensureAppId(loader, jarFile.getName());
+            const appId = await loader.getAppId();
+            if (appId) {
+                console.log('[FreeJ2ME] Uninstalling previous app version:', appId);
+                await launcherUtil.uninstallApp(appId);
+            }
+        } catch (cleanErr) {
+            console.warn('[FreeJ2ME] Uninstall check warning:', cleanErr);
+        }
+
         console.log('[FreeJ2ME] Menjalankan JAR:', jarPath);
 
         if (loadingEl) {
@@ -117,7 +140,7 @@ function autoscale() {
     }
     if (scale <= 0) scale = 1;
 
-    display.currentCSSZoom = scale;
+    currentZoom = scale;
     display.style.width = Math.round(screenCtx.canvas.width * scale) + 'px';
     display.style.height = Math.round(screenCtx.canvas.height * scale) + 'px';
 }
@@ -171,8 +194,8 @@ function setListeners() {
 
         evtQueue.queueEvent({
             kind: 'pointerpressed',
-            x: e.offsetX / display.currentCSSZoom | 0,
-            y: e.offsetY / display.currentCSSZoom | 0,
+            x: (e.offsetX / currentZoom) | 0,
+            y: (e.offsetY / currentZoom) | 0,
         });
 
         mouseDown = true;
@@ -186,8 +209,8 @@ function setListeners() {
 
         evtQueue.queueEvent({
             kind: 'pointerdragged',
-            x: e.offsetX / display.currentCSSZoom | 0,
-            y: e.offsetY / display.currentCSSZoom | 0,
+            x: (e.offsetX / currentZoom) | 0,
+            y: (e.offsetY / currentZoom) | 0,
         });
 
         e.preventDefault();
@@ -201,8 +224,8 @@ function setListeners() {
 
         evtQueue.queueEvent({
             kind: 'pointerreleased',
-            x: (e.pageX - display.offsetLeft) / display.currentCSSZoom | 0,
-            y: (e.pageY - display.offsetTop) / display.currentCSSZoom | 0,
+            x: ((e.pageX - display.offsetLeft) / currentZoom) | 0,
+            y: ((e.pageY - display.offsetTop) / currentZoom) | 0,
         });
 
         e.preventDefault();
@@ -215,8 +238,8 @@ function setListeners() {
 
         evtQueue.queueEvent({
             kind: 'pointerpressed',
-            x: (e.changedTouches[0].pageX - display.offsetLeft) / display.currentCSSZoom | 0,
-            y: (e.changedTouches[0].pageY - display.offsetTop) / display.currentCSSZoom | 0,
+            x: ((e.changedTouches[0].pageX - display.offsetLeft) / currentZoom) | 0,
+            y: ((e.changedTouches[0].pageY - display.offsetTop) / currentZoom) | 0,
         });
 
         e.preventDefault();
@@ -227,8 +250,8 @@ function setListeners() {
 
         evtQueue.queueEvent({
             kind: 'pointerdragged',
-            x: (e.changedTouches[0].pageX - display.offsetLeft) / display.currentCSSZoom | 0,
-            y: (e.changedTouches[0].pageY - display.offsetTop) / display.currentCSSZoom | 0,
+            x: ((e.changedTouches[0].pageX - display.offsetLeft) / currentZoom) | 0,
+            y: ((e.changedTouches[0].pageY - display.offsetTop) / currentZoom) | 0,
         });
 
         e.preventDefault();
@@ -239,8 +262,8 @@ function setListeners() {
 
         evtQueue.queueEvent({
             kind: 'pointerreleased',
-            x: (e.changedTouches[0].pageX - display.offsetLeft) / display.currentCSSZoom | 0,
-            y: (e.changedTouches[0].pageY - display.offsetTop) / display.currentCSSZoom | 0,
+            x: ((e.changedTouches[0].pageX - display.offsetLeft) / currentZoom) | 0,
+            y: ((e.changedTouches[0].pageY - display.offsetTop) / currentZoom) | 0,
         });
 
         e.preventDefault();
