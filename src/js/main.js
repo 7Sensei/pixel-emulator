@@ -11,7 +11,7 @@
 const ENGINE_CONFIG = {
   emulatorjsLocalData: 'engines/emulatorjs/data/',
   emulatorjsCdnData: 'https://cdn.emulatorjs.org/stable/data/',
-  j2meCoreUrl: 'engines/j2me-core/j2me-web-player.html',
+  j2meCoreUrl: 'engines/j2me-core/j2me-web-player.html?embedded=1',
   romsDir: 'roms',
   catalogueUrl: 'assets/games.json'
 };
@@ -40,7 +40,7 @@ const EXTENSION_CONFIG = {
 
 // State Global Aplikasi
 const state = {
-  activeEngine: null, // 'freej2me' | 'emulatorjs' | null
+  activeEngine: null, // 'j2me-core' | 'emulatorjs' | null
   activeGameFile: null,
   activeGameName: 'NONE',
   activeBlobUrl: null,
@@ -386,7 +386,7 @@ async function activateJ2MEContainer(gameFile) {
   iframe.style.border = 'none';
   iframe.style.backgroundColor = '#000';
   iframe.style.overflow = 'hidden';
-  iframe.setAttribute('allow', 'autoplay; fullscreen');
+  iframe.setAttribute('allow', 'fullscreen');
   iframe.setAttribute('title', 'J2ME Web Player');
 
   DOM.freej2meViewport.innerHTML = '';
@@ -411,9 +411,23 @@ async function activateJ2MEContainer(gameFile) {
         logMessage('WARN', 'Tidak ada data file JAR untuk dimuat.', 'warn');
         return;
       }
-      iframe.contentWindow.postMessage({ type: 'LOAD_JAR', buffer, name: gameName }, '*');
-      logMessage('J2ME', `JAR "${gameName}" berhasil dikirim ke J2ME-Web-Core via postMessage.`, 'info');
-      DOM.saveStatusText.textContent = 'MEMASANG GAME...';
+
+      const sendJar = () => {
+        try {
+          if (iframe.contentWindow) {
+            iframe.contentWindow.postMessage({ type: 'LOAD_JAR', buffer, name: gameName }, '*');
+          }
+        } catch (err) {
+          console.warn('postMessage retry warning:', err);
+        }
+      };
+
+      sendJar();
+      // Re-trigger setelah delay 200ms untuk memastikan script iframe selesai boot
+      setTimeout(sendJar, 200);
+
+      logMessage('J2ME', `JAR "${gameName}" berhasil dikirim ke J2ME-Web-Core.`, 'info');
+      DOM.saveStatusText.textContent = 'GAME AKTIF';
     } catch (e) {
       logMessage('ERROR', `Gagal memuat JAR: ${e.message}`, 'error');
     }
@@ -818,19 +832,39 @@ DOM.dropzone.addEventListener('drop', (e) => {
   }
 });
 
-// Drag & Drop pada Monitor / Layar Arcade (Screen Frame)
-if (DOM.screenFrame) {
-  ['dragenter', 'dragover'].forEach(eventName => {
-    DOM.screenFrame.addEventListener(eventName, (e) => {
-      e.preventDefault();
-      if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
-    });
+// Helper untuk menonaktifkan pointer-events pada iframe saat drag berlangsung
+// Mencegah Firefox/Chrome memicu Security Error atau navigasi file:/// saat cursor melintas di atas iframe
+function setIframesPointerEvents(enabled) {
+  document.querySelectorAll('iframe').forEach(frame => {
+    frame.style.pointerEvents = enabled ? 'auto' : 'none';
   });
+}
 
-  DOM.screenFrame.addEventListener('drop', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
+// Global Drag & Drop Guards pada Window
+window.addEventListener('dragenter', (e) => {
+  e.preventDefault();
+  setIframesPointerEvents(false);
+});
 
+window.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+});
+
+window.addEventListener('dragleave', (e) => {
+  // Pulihkan pointer-events jika drag benar-benar meninggalkan layar browser
+  if (e.clientX <= 0 || e.clientY <= 0 || e.clientX >= window.innerWidth || e.clientY >= window.innerHeight) {
+    setIframesPointerEvents(true);
+  }
+});
+
+window.addEventListener('drop', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  setIframesPointerEvents(true);
+
+  // Jika drop dilepaskan di area stage umum (bukan dropzone), tetap luncurkan game
+  if (!e.target.closest('#dropzone')) {
     let file = null;
     if (e.dataTransfer) {
       if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
@@ -844,17 +878,12 @@ if (DOM.screenFrame) {
         }
       }
     }
-
     if (file) {
-      logMessage('SYSTEM', `File diterima via Drag & Drop Monitor: "${file.name}"`, 'info');
+      logMessage('SYSTEM', `File diterima via Drag & Drop Layar: "${file.name}"`, 'info');
       handleFileInput(file);
     }
-  });
-}
-
-// Cegah perilaku default browser membuka file jika di-drop di luar zona
-window.addEventListener('dragover', (e) => e.preventDefault());
-window.addEventListener('drop', (e) => e.preventDefault());
+  }
+});
 
 // Save Manager: Export
 DOM.btnExportSave.addEventListener('click', exportSaveData);

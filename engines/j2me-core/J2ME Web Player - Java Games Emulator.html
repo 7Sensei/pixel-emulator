@@ -23,14 +23,30 @@
   
   body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-    background-color: var(--bg-body);
+    background-color: #000;
     color: var(--text);
     min-height: 100vh;
     display: flex;
     flex-direction: column;
     align-items: center;
-    overflow-x: hidden;
-    padding-bottom: 40px;
+    justify-content: center;
+    overflow: auto;
+    padding: 10px;
+    margin: 0;
+  }
+  
+  @media (max-height: 780px) {
+    .device-wrapper {
+      transform: scale(0.85);
+      margin-bottom: -40px;
+    }
+  }
+
+  @media (max-height: 640px) {
+    .device-wrapper {
+      transform: scale(0.72);
+      margin-bottom: -100px;
+    }
   }
 
   header {
@@ -578,6 +594,59 @@
       font-size: 9px;
     }
   }
+
+  /* ============================================================
+     EMBEDDED MODE — aktif saat iframe dibuka dengan ?embedded=1
+     Sembunyikan header, controls, action-bar; canvas isi penuh
+     ============================================================ */
+  body.embedded-mode {
+    padding: 0;
+    margin: 0;
+    overflow: hidden;
+    justify-content: flex-start;
+    align-items: stretch;
+  }
+  body.embedded-mode header,
+  body.embedded-mode .controls-grid,
+  body.embedded-mode .action-bar,
+  body.embedded-mode .keyboard-hint {
+    display: none !important;
+  }
+  body.embedded-mode .device-wrapper {
+    width: 100%;
+    height: 100vh;
+    max-width: 100%;
+    border-radius: 0;
+    padding: 0;
+    gap: 0;
+    background: #000;
+    box-shadow: none;
+  }
+  body.embedded-mode .screen-container {
+    width: 100%;
+    height: 100%;
+    aspect-ratio: unset;
+    border-radius: 0;
+    border: none;
+    box-shadow: none;
+  }
+  body.embedded-mode canvas {
+    width: 100%;
+    height: 100%;
+    background: #000;
+  }
+  @media (max-height: 780px) {
+    body.embedded-mode .device-wrapper {
+      transform: none;
+      margin: 0;
+    }
+  }
+  @media (max-height: 640px) {
+    body.embedded-mode .device-wrapper {
+      transform: none;
+      margin: 0;
+    }
+  }
 </style>
 </head>
 <body>
@@ -887,6 +956,7 @@ function loadGame(file) {
   loadingText.textContent = `Loading ${file.name}...`;
   currentGameName = file.name;
   currentGame = 'jar'; // JAR emulation mode
+  isRunning = true;
 
   setTimeout(() => {
     loadingText.textContent = 'Initializing MIDlet...';
@@ -902,6 +972,44 @@ function loadGame(file) {
 // ============================
 // Game Loop
 // ============================
+// Drag & drop guards to prevent browser navigation to file:///
+// In embedded mode (inside iframe), we only preventDefault — never try to read files
+// because Firefox throws a Security Error if iframe attempts to access dragged file:/// objects.
+const IS_EMBEDDED = new URLSearchParams(window.location.search).get('embedded') === '1';
+
+if (IS_EMBEDDED) {
+  // Embedded in Pixel Emulator: apply embedded-mode CSS class, disable own drag handlers
+  document.body.classList.add('embedded-mode');
+  window.addEventListener('dragover', (e) => { e.preventDefault(); e.stopPropagation(); });
+  window.addEventListener('drop',     (e) => { e.preventDefault(); e.stopPropagation(); });
+} else {
+  // Standalone mode: allow user to drag & drop JAR files directly
+  window.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+  });
+  window.addEventListener('drop', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      loadGame(e.dataTransfer.files[0]);
+    }
+  });
+}
+
+// Pixel Emulator postMessage integration
+window.addEventListener('message', (e) => {
+  if (e.data && (e.data.type === 'LOAD_JAR' || e.data.type === 'PIXEL_EMU_LOAD_JAR')) {
+    try {
+      const fileName = e.data.name || 'game.jar';
+      const file = new File([e.data.buffer], fileName, { type: 'application/java-archive' });
+      loadGame(file);
+    } catch (err) {
+      console.error('Failed to load JAR from postMessage:', err);
+    }
+  }
+});
+
 function startGameLoop() {
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -935,34 +1043,72 @@ function loop() {
 // ============================
 // JAR Simulation (Demo for loaded JARs)
 // ============================
+let simFrame = 0;
 function drawJARSimulation() {
-  ctx.fillStyle = '#fff';
-  ctx.font = '12px monospace';
+  simFrame++;
+  ctx.fillStyle = '#0a0d1a';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Top Status Bar (Nokia / Sony Ericsson Style)
+  ctx.fillStyle = '#141829';
+  ctx.fillRect(0, 0, canvas.width, 22);
+  ctx.fillStyle = '#00f5d4';
+  ctx.font = 'bold 10px monospace';
   ctx.textAlign = 'left';
-  
-  ctx.fillText(`GAME: ${currentGameName.substring(0, 15)}`, 5, 15);
-  ctx.fillText(`MEM: 2048KB Free`, 5, 30);
-  ctx.fillText(`FPS: 60`, 5, 45);
-  
+  ctx.fillText('📶 3G  🔋 100%', 6, 15);
+  ctx.textAlign = 'right';
+  ctx.fillText('MIDP-2.0', canvas.width - 6, 15);
+
+  // Title Box
+  const cleanTitle = (currentGameName || 'J2ME Game').replace(/\.[^/.]+$/, '').toUpperCase();
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 12px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(cleanTitle.substring(0, 22), canvas.width / 2, 48);
+
+  // Screen Viewport (Simulated Game Canvas)
+  const pad = 16;
+  const vpW = canvas.width - (pad * 2);
+  const vpH = 180;
+  ctx.fillStyle = '#030712';
+  ctx.fillRect(pad, 60, vpW, vpH);
+  ctx.strokeStyle = '#00f5d4';
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(pad, 60, vpW, vpH);
+
+  // Animated Retro Graphic inside Viewport
+  const pulse = Math.sin(simFrame * 0.08) * 4;
+  ctx.fillStyle = '#00f5d4';
+  ctx.font = '40px sans-serif';
+  ctx.fillText('☕', canvas.width / 2, 130 + pulse);
+
+  ctx.font = 'bold 12px sans-serif';
+  ctx.fillStyle = '#00f5d4';
+  ctx.fillText('RUNNING MIDLET', canvas.width / 2, 168);
+
+  ctx.font = '10px monospace';
+  ctx.fillStyle = '#8b949e';
+  ctx.fillText('FPS: 60.0 // RAM: 2048 KB', canvas.width / 2, 186);
+
   if (lastKey) {
-    ctx.fillStyle = '#4caf50';
-    ctx.font = 'bold 40px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(lastKey, canvas.width/2, canvas.height/2);
-    
-    ctx.fillStyle = '#ccc';
-    ctx.font = '12px sans-serif';
-    ctx.fillText('Key Pressed', canvas.width/2, canvas.height/2 + 25);
+    ctx.fillStyle = '#ff007f';
+    ctx.font = 'bold 12px monospace';
+    ctx.fillText(`INPUT: [${lastKey}]`, canvas.width / 2, 212);
   } else {
     ctx.fillStyle = '#555';
-    ctx.font = '14px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('Waiting for input...', canvas.width/2, canvas.height/2);
-    
     ctx.font = '10px sans-serif';
-    ctx.fillStyle = '#444';
-    ctx.fillText('Press End to exit', canvas.width/2, canvas.height/2 + 20);
+    ctx.fillText('Keypad & D-Pad Ready', canvas.width / 2, 212);
   }
+
+  // Softkey Bar
+  ctx.fillStyle = '#141829';
+  ctx.fillRect(0, canvas.height - 24, canvas.width, 24);
+  ctx.fillStyle = '#00f5d4';
+  ctx.font = 'bold 10px sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText('Menu', 8, canvas.height - 8);
+  ctx.textAlign = 'right';
+  ctx.fillText('Exit', canvas.width - 8, canvas.height - 8);
 }
 
 // ============================
