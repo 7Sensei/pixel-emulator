@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>J2ME Launcher - CheerpJ</title>
+<script src="https://cjrtnc.leaningtech.com/3.0/cj3loader.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    width: 100%; height: 100%;
+    background: #000;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Courier New', monospace;
+  }
+
+  #cheerpj-display {
+    width: 100%;
+    height: 100%;
+    background: #000;
+    display: block;
+    position: relative;
+  }
+
+  /* Waiting / loading overlay */
+  #overlay {
+    position: absolute;
+    inset: 0;
+    background: #000;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    gap: 16px;
+    color: #00f5d4;
+  }
+  #overlay.hidden { display: none; }
+
+  .ov-icon { font-size: 48px; animation: pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse {
+    0%,100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.12); opacity: 0.7; }
+  }
+  .ov-title { font-size: 13px; font-weight: bold; letter-spacing: 2px; }
+  .ov-sub   { font-size: 10px; color: #8b949e; text-align: center; max-width: 200px; }
+
+  #error-box {
+    display: none;
+    position: absolute;
+    inset: 0;
+    background: #0d0005;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    gap: 12px;
+    color: #ff4d6d;
+    text-align: center;
+    z-index: 110;
+  }
+  #error-box.visible { display: flex; }
+  #error-icon { font-size: 36px; }
+  #error-msg  { font-size: 10px; color: #8b949e; max-width: 220px; line-height: 1.6; }
+  #error-retry {
+    margin-top: 8px;
+    padding: 6px 16px;
+    background: #1c2438;
+    border: 1px solid #00f5d4;
+    color: #00f5d4;
+    font-family: inherit;
+    font-size: 10px;
+    cursor: pointer;
+    border-radius: 4px;
+    letter-spacing: 1px;
+  }
+  #error-retry:hover { background: #00f5d4; color: #000; }
+</style>
+</head>
+<body>
+
+<div style="position:relative; width:100%; height:100%; background:#000;">
+  <!-- CheerpJ renders into this div -->
+  <div id="cheerpj-display"></div>
+
+  <!-- Waiting overlay (shown before JAR arrives) -->
+  <div id="overlay">
+    <div class="ov-icon">☕</div>
+    <div class="ov-title">J2ME ENGINE READY</div>
+    <div class="ov-sub">Drop a .JAR file into the arcade slot to start</div>
+  </div>
+
+  <!-- Error overlay -->
+  <div id="error-box">
+    <div id="error-icon">⚠️</div>
+    <div id="error-msg">Failed to initialize Java runtime.</div>
+    <button id="error-retry" onclick="location.reload()">↺ RETRY</button>
+  </div>
+</div>
+
+<script>
+/**
+ * Pixel Emulator — J2ME Launcher via CheerpJ
+ * Receives JAR via postMessage from parent, runs in CheerpJ WebAssembly JVM
+ */
+
+const overlay   = document.getElementById('overlay');
+const errorBox  = document.getElementById('error-box');
+const errorMsg  = document.getElementById('error-msg');
+const display   = document.getElementById('cheerpj-display');
+
+let cheerpjReady = false;
+let pendingJar   = null; // { buffer: ArrayBuffer, name: string }
+
+// ─────────────────────────────────────────────
+// 1. Init CheerpJ on page load
+// ─────────────────────────────────────────────
+async function initCheerpJ() {
+  try {
+    // cheerpjInit options — works with or without SharedArrayBuffer
+    // CheerpJ 3 falls back gracefully if COOP/COEP headers are absent
+    await cheerpjInit({
+      status: 'none',
+      logCanvasUpdates: false,
+      // If SharedArrayBuffer is unavailable (no COOP/COEP headers on server),
+      // CheerpJ will still run but in single-threaded mode
+    });
+
+    // Create display surface — use full available space in iframe
+    const w = window.innerWidth  || 240;
+    const h = window.innerHeight || 320;
+    cheerpjCreateDisplay(w, h, display);
+
+    cheerpjReady = true;
+    console.log('[J2ME Launcher] CheerpJ initialized OK');
+
+    // If a JAR arrived before CheerpJ was ready, launch it now
+    if (pendingJar) {
+      const { buffer, name } = pendingJar;
+      pendingJar = null;
+      launchJar(buffer, name);
+    }
+  } catch (err) {
+    console.error('[J2ME Launcher] CheerpJ init failed:', err);
+    showError(`CheerpJ initialization failed.\n${err.message || err}`);
+  }
+}
+
+// ─────────────────────────────────────────────
+// 2. Launch a JAR from ArrayBuffer
+// ─────────────────────────────────────────────
+async function launchJar(buffer, name) {
+  if (!cheerpjReady) {
+    // CheerpJ not ready yet — queue it
+    pendingJar = { buffer, name };
+    return;
+  }
+
+  overlay.classList.add('hidden');
+
+  try {
+    console.log(`[J2ME Launcher] Launching: ${name} (${(buffer.byteLength/1024).toFixed(1)} KB)`);
+
+    // Write JAR into CheerpJ's in-memory virtual filesystem at /str/
+    const bytes = new Uint8Array(buffer);
+    cheerpOSAddStringFile('/str/game.jar', bytes);
+
+    // Run the MIDlet JAR
+    await cheerpjRunJar('/str/game.jar');
+  } catch (err) {
+    console.error('[J2ME Launcher] Failed to run JAR:', err);
+    showError(`Failed to run "${name}".\n\n${err.message || err}\n\nThis game may use APIs not yet supported by CheerpJ.`);
+  }
+}
+
+function showError(msg) {
+  overlay.classList.add('hidden');
+  errorMsg.textContent = msg;
+  errorBox.classList.add('visible');
+}
+
+// ─────────────────────────────────────────────
+// 3. postMessage listener (from Pixel Emulator parent)
+// ─────────────────────────────────────────────
+window.addEventListener('message', (e) => {
+  if (!e.data) return;
+  const { type, buffer, name } = e.data;
+
+  if (type === 'LOAD_JAR' || type === 'PIXEL_EMU_LOAD_JAR') {
+    if (!(buffer instanceof ArrayBuffer) || buffer.byteLength === 0) {
+      console.warn('[J2ME Launcher] Received empty or invalid buffer');
+      return;
+    }
+    launchJar(buffer, name || 'game.jar');
+  }
+});
+
+// ─────────────────────────────────────────────
+// 4. Prevent file:/// drag-drop Security Errors
+// ─────────────────────────────────────────────
+window.addEventListener('dragover', (e) => { e.preventDefault(); e.stopPropagation(); });
+window.addEventListener('drop',     (e) => { e.preventDefault(); e.stopPropagation(); });
+
+// ─────────────────────────────────────────────
+// 5. Boot
+// ─────────────────────────────────────────────
+initCheerpJ();
+</script>
+</body>
+</html>

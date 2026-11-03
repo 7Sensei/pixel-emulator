@@ -11,7 +11,7 @@
 const ENGINE_CONFIG = {
   emulatorjsLocalData: 'engines/emulatorjs/data/',
   emulatorjsCdnData: 'https://cdn.emulatorjs.org/stable/data/',
-  j2meCoreUrl: 'engines/j2me-core/j2me-web-player.html?embedded=1',
+  j2meCoreUrl: 'engines/j2me-core/j2me-launcher.html',
   romsDir: 'roms',
   catalogueUrl: 'assets/games.json'
 };
@@ -357,7 +357,7 @@ async function activateEmulatorJSContainer(gameFile, coreName) {
 // 2. Container J2ME-Web-Core (Java ME MIDlets)
 // ============================================================================
 async function activateJ2MEContainer(gameFile) {
-  logMessage('J2ME', `Memulai container J2ME-Web-Core...`, 'info');
+  logMessage('J2ME', `Memulai container J2ME (CheerpJ Engine)...`, 'info');
   playChiptune('start');
 
   cleanupActiveEngine();
@@ -377,7 +377,7 @@ async function activateJ2MEContainer(gameFile) {
   DOM.emulatorjsContainer.classList.remove('active');
   DOM.freej2meContainer.classList.add('active');
 
-  // Buat iframe J2ME-Web-Core menyatu sempurna dengan monitor arcade
+  // Buat iframe CheerpJ J2ME Launcher, menyatu sempurna dengan monitor arcade
   const iframe = document.createElement('iframe');
   iframe.id = 'j2me-player';
   iframe.src = ENGINE_CONFIG.j2meCoreUrl;
@@ -386,51 +386,70 @@ async function activateJ2MEContainer(gameFile) {
   iframe.style.border = 'none';
   iframe.style.backgroundColor = '#000';
   iframe.style.overflow = 'hidden';
-  iframe.setAttribute('allow', 'fullscreen');
-  iframe.setAttribute('title', 'J2ME Web Player');
+  // CheerpJ membutuhkan izin cross-origin dan autoplay
+  iframe.setAttribute('allow', 'fullscreen; autoplay; cross-origin-isolated');
+  iframe.setAttribute('title', 'J2ME CheerpJ Launcher');
+  // sandbox tidak dipakai karena CheerpJ butuh akses penuh ke WebAssembly
 
   DOM.freej2meViewport.innerHTML = '';
   DOM.freej2meViewport.appendChild(iframe);
 
-  DOM.saveStatusText.textContent = 'AKTIF [J2ME]';
+  DOM.saveStatusText.textContent = 'MENGINISIALISASI J2ME...';
   DOM.saveStatusText.className = 'save-status-text';
 
-  // Muat JAR ke dalam iframe via postMessage
-  iframe.onload = async () => {
-    logMessage('J2ME', `iFrame J2ME-Web-Core siap. Membaca dan mengirim JAR "${gameName}"...`, 'info');
-    DOM.saveStatusText.textContent = 'MEMUAT J2ME...';
-    try {
-      let buffer = null;
-      if (gameFile instanceof File || gameFile instanceof Blob) {
-        buffer = await gameFile.arrayBuffer();
-      } else if (typeof gameFile === 'string') {
-        const res = await fetch(gameFile);
-        if (res.ok) buffer = await res.arrayBuffer();
-      }
-      if (!buffer) {
-        logMessage('WARN', 'Tidak ada data file JAR untuk dimuat.', 'warn');
-        return;
-      }
-
-      const sendJar = () => {
-        try {
-          if (iframe.contentWindow) {
-            iframe.contentWindow.postMessage({ type: 'LOAD_JAR', buffer, name: gameName }, '*');
-          }
-        } catch (err) {
-          console.warn('postMessage retry warning:', err);
-        }
-      };
-
-      sendJar();
-      // Re-trigger setelah delay 200ms untuk memastikan script iframe selesai boot
-      setTimeout(sendJar, 200);
-
-      logMessage('J2ME', `JAR "${gameName}" berhasil dikirim ke J2ME-Web-Core.`, 'info');
-      DOM.saveStatusText.textContent = 'GAME AKTIF';
-    } catch (e) {
-      logMessage('ERROR', `Gagal memuat JAR: ${e.message}`, 'error');
+  // Baca file JAR terlebih dahulu, LALU kirim setelah iframe siap
+  let buffer = null;
+  try {
+    if (gameFile instanceof File || gameFile instanceof Blob) {
+      buffer = await gameFile.arrayBuffer();
+    } else if (typeof gameFile === 'string') {
+      const res = await fetch(gameFile);
+      if (res.ok) buffer = await res.arrayBuffer();
     }
+  } catch (e) {
+    logMessage('ERROR', `Gagal membaca JAR: ${e.message}`, 'error');
+    return;
+  }
+
+  if (!buffer) {
+    logMessage('WARN', 'Tidak ada data file JAR untuk dimuat.', 'warn');
+    return;
+  }
+
+  logMessage('J2ME', `JAR "${gameName}" (${(buffer.byteLength/1024).toFixed(1)} KB) siap. Menunggu iframe CheerpJ...`, 'info');
+
+  // Kirim JAR setelah iframe selesai load
+  iframe.onload = () => {
+    logMessage('J2ME', `iFrame CheerpJ siap. Mengirim JAR "${gameName}" via postMessage...`, 'info');
+    DOM.saveStatusText.textContent = 'MEMUAT J2ME (CheerpJ)...';
+
+    const sendJar = () => {
+      try {
+        if (iframe.contentWindow) {
+          // Kirim salinan buffer agar tidak jadi detached ArrayBuffer
+          const copy = buffer.slice(0);
+          iframe.contentWindow.postMessage(
+            { type: 'LOAD_JAR', buffer: copy, name: gameName },
+            '*',
+            [copy]  // transfer ownership supaya tidak diblokir CORS memory limit
+          );
+        }
+      } catch (err) {
+        console.warn('postMessage JAR error:', err);
+      }
+    };
+
+    sendJar();
+    // Retry setelah 500ms untuk antisipasi lambatnya inisialisasi CheerpJ
+    setTimeout(sendJar, 500);
+    setTimeout(sendJar, 1500);
+
+    logMessage('J2ME', `Perintah muat JAR dikirim. CheerpJ sedang compile bytecode...`, 'info');
+    DOM.saveStatusText.textContent = 'JAVA AKTIF';
+  };
+
+  iframe.onerror = () => {
+    logMessage('ERROR', 'Gagal memuat halaman CheerpJ Launcher.', 'error');
   };
 }
 

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pixel-emulator-v3';
+const CACHE_NAME = 'pixel-emulator-v4';
 
 const STATIC_ASSETS = [
   './',
