@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -587,7 +587,7 @@
     <span>☕</span> J2ME Web Player
     <span class="badge">BETA</span>
   </h1>
-  <div style="font-size: 12px; color: var(--text-dim);">Эмулятор Java-игр</div>
+  <div style="font-size: 12px; color: var(--text-dim);">Java Games Emulator</div>
 </header>
 
 <div class="device-wrapper">
@@ -597,41 +597,41 @@
     <div class="overlay-msg" id="startScreen">
       <div class="overlay-icon">📱</div>
       <div class="overlay-text">
-        Загрузите файл .JAR или .JAD<br>для запуска игры
+        Load a .JAR or .JAD file<br>to start the game
       </div>
-      <button class="btn-upload-overlay" onclick="document.getElementById('fileInput').click()">Выбрать файл</button>
+      <button class="btn-upload-overlay" onclick="document.getElementById('fileInput').click()">Select File</button>
     </div>
 
     <!-- Game Menu -->
     <div class="game-menu hidden" id="gameMenu">
       <div class="menu-header">
         <h2>☕ J2ME Games</h2>
-        <p>Выберите игру для запуска</p>
+        <p>Select a game to play</p>
       </div>
       <div class="menu-list" id="menuList">
         <!-- Games will be populated by JS -->
       </div>
       <div class="menu-footer">
-        <button class="menu-btn secondary" onclick="showFilePicker()">📂 JAR файл</button>
-        <button class="menu-btn primary" onclick="closeMenu()">Назад</button>
+        <button class="menu-btn secondary" onclick="showFilePicker()">📂 JAR File</button>
+        <button class="menu-btn primary" onclick="closeMenu()">Back</button>
       </div>
     </div>
 
     <div class="overlay-msg hidden" id="loadingScreen">
       <div class="overlay-icon">⏳</div>
-      <div class="overlay-text" id="loadingText">Инициализация...</div>
+      <div class="overlay-text" id="loadingText">Initializing...</div>
     </div>
   </div>
 
   <div class="controls-grid">
     <!-- Left Functional Keys -->
     <div class="col-func">
-      <button class="softkey" data-key="SoftLeft">Меню</button>
+      <button class="softkey" data-key="SoftLeft">Menu</button>
       
       <!-- Red Call End Button (Centered vertically via flex in parent) -->
-      <button class="call-btn btn-red" data-key="End" title="Назад / Отмена">🗙</button>
+      <button class="call-btn btn-red" data-key="End" title="Back / Cancel">🗙</button>
       
-      <button class="softkey" data-key="SoftRight">Назад</button>
+      <button class="softkey" data-key="SoftRight">Back</button>
     </div>
 
     <!-- D-Pad -->
@@ -664,22 +664,22 @@
 </div>
 
 <div class="action-bar">
-  <button class="ctrl-btn" onclick="openMenu()">🎮 Игры</button>
-  <button class="ctrl-btn" onclick="toggleFullscreen()">⛶ Полный экран</button>
+  <button class="ctrl-btn" onclick="openMenu()">🎮 Games</button>
+  <button class="ctrl-btn" onclick="toggleFullscreen()">⛶ Fullscreen</button>
   <button class="ctrl-btn primary" onclick="document.getElementById('fileInput').click()">📂 JAR</button>
 </div>
 
 <input type="file" id="fileInput" accept=".jar,.jad">
 
 <div class="keyboard-hint">
-  <p>Управление с клавиатуры:</p>
+  <p>Keyboard Controls:</p>
   <p>
-    Стрелки: D-Pad | Enter: OK | Backspace: SoftRight | 
-    Цифры: 0-9
+    Arrow keys: D-Pad | Enter: OK | Backspace: SoftRight | 
+    Numpad: 0-9
   </p>
 </div>
 
-<div class="toast" id="toast">Сообщение</div>
+<div class="toast" id="toast">Message</div>
 
 <script>
 /**
@@ -709,19 +709,19 @@ const BUILT_IN_GAMES = [
   {
     id: 'snake',
     name: 'Snake',
-    desc: 'Классическая змейка',
+    desc: 'Classic Snake',
     icon: '🐍'
   },
   {
     id: 'tetris',
     name: 'Tetris',
-    desc: 'Собери линии',
+    desc: 'Clear Lines',
     icon: '🧱'
   },
   {
     id: 'pong',
     name: 'Pong',
-    desc: 'Аркадный теннис',
+    desc: 'Arcade Tennis',
     icon: '🏓'
   }
 ];
@@ -755,7 +755,7 @@ let pongScore2 = 0;
 let pongMode = 'ai'; // 'ai' or '2p'
 
 // ============================
-// Инициализация
+// Initialization
 // ============================
 function init() {
   drawBootscreen();
@@ -862,11 +862,11 @@ function launchGame(gameId) {
   
   isRunning = true;
   startGameLoop();
-  showToast(`Запущена: ${gameId}`);
+  showToast(`Running: ${gameId}`);
 }
 
 // ============================
-// Управление файлами
+// File Management
 // ============================
 fileInput.addEventListener('change', (e) => {
   const file = e.target.files[0];
@@ -874,7 +874,7 @@ fileInput.addEventListener('change', (e) => {
 
   const ext = file.name.split('.').pop().toLowerCase();
   if (ext !== 'jar' && ext !== 'jad') {
-    showToast('Пожалуйста, выберите файл .JAR или .JAD');
+    showToast('Please select a .JAR or .JAD file');
     return;
   }
 
@@ -884,23 +884,23 @@ fileInput.addEventListener('change', (e) => {
 function loadGame(file) {
   startScreen.classList.add('hidden');
   loadingScreen.classList.remove('hidden');
-  loadingText.textContent = `Загрузка ${file.name}...`;
+  loadingText.textContent = `Loading ${file.name}...`;
   currentGameName = file.name;
   currentGame = 'jar'; // JAR emulation mode
 
   setTimeout(() => {
-    loadingText.textContent = 'Инициализация MIDlet...';
+    loadingText.textContent = 'Initializing MIDlet...';
   }, 800);
 
   setTimeout(() => {
     loadingScreen.classList.add('hidden');
     startGameLoop();
-    showToast('Игра загружена (Режим эмуляции)');
+    showToast('Game loaded (Emulation Mode)');
   }, 2000);
 }
 
 // ============================
-// Игровой цикл
+// Game Loop
 // ============================
 function startGameLoop() {
   ctx.fillStyle = '#000';
@@ -961,7 +961,7 @@ function drawJARSimulation() {
     
     ctx.font = '10px sans-serif';
     ctx.fillStyle = '#444';
-    ctx.fillText('Нажмите End для выхода', canvas.width/2, canvas.height/2 + 20);
+    ctx.fillText('Press End to exit', canvas.width/2, canvas.height/2 + 20);
   }
 }
 
@@ -1278,7 +1278,7 @@ function drawPong() {
 }
 
 // ============================
-// Обработка ввода
+// Input Handling
 // ============================
 const KEY_MAP = {
   'ArrowUp': 'Up', 'ArrowDown': 'Down', 'ArrowLeft': 'Left', 'ArrowRight': 'Right',
@@ -1432,7 +1432,7 @@ canvas.addEventListener('touchmove', (e) => {
 }, { passive: false });
 
 // ============================
-// UI Функции
+// UI Functions
 // ============================
 function closeGame() {
   isRunning = false;
@@ -1449,14 +1449,14 @@ function resetEmulation() {
   gameMenu.classList.add('hidden');
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  showToast('Эмулятор сброшен');
+  showToast('Emulator reset');
 }
 
 function toggleFullscreen() {
   const elem = document.documentElement;
   if (!document.fullscreenElement) {
     elem.requestFullscreen().catch(err => {
-      showToast(`Ошибка: ${err.message}`);
+      showToast(`Error: ${err.message}`);
     });
   } else {
     document.exitFullscreen();
