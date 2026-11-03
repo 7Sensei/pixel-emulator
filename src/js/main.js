@@ -11,7 +11,7 @@
 const ENGINE_CONFIG = {
   emulatorjsLocalData: 'engines/emulatorjs/data/',
   emulatorjsCdnData: 'https://cdn.emulatorjs.org/stable/data/',
-  j2meCoreUrl: 'engines/j2me-core/j2me-launcher.html',
+  j2meCoreUrl: 'engines/freej2me-web/run.html',
   romsDir: 'roms',
   catalogueUrl: 'assets/games.json'
 };
@@ -19,8 +19,8 @@ const ENGINE_CONFIG = {
 // Peta Dukungan Ekstensi ke Engine & Core
 const EXTENSION_CONFIG = {
   // Java ME
-  jar: { engine: 'j2me-core', core: 'midp-2.0', name: 'Java ME (J2ME-Web-Core)', badgeClass: 'active-j2me' },
-  jad: { engine: 'j2me-core', core: 'midp-2.0', name: 'Java ME (J2ME-Web-Core)', badgeClass: 'active-j2me' },
+  jar: { engine: 'freej2me', core: 'midp-2.0', name: 'Java ME (FreeJ2ME-web)', badgeClass: 'active-j2me' },
+  jad: { engine: 'freej2me', core: 'midp-2.0', name: 'Java ME (FreeJ2ME-web)', badgeClass: 'active-j2me' },
 
   // Nintendo Classic & Handhelds
   nes: { engine: 'emulatorjs', core: 'nes', name: 'Nintendo Entertainment System', badgeClass: 'active-emulatorjs' },
@@ -357,7 +357,7 @@ async function activateEmulatorJSContainer(gameFile, coreName) {
 // 2. Container J2ME-Web-Core (Java ME MIDlets)
 // ============================================================================
 async function activateJ2MEContainer(gameFile) {
-  logMessage('J2ME', `Memulai container J2ME (CheerpJ Engine)...`, 'info');
+  logMessage('J2ME', `Memulai container FreeJ2ME (CheerpJ WebAssembly)...`, 'info');
   playChiptune('start');
 
   cleanupActiveEngine();
@@ -369,7 +369,7 @@ async function activateJ2MEContainer(gameFile) {
     gameName = gameFile.split('/').pop();
   }
 
-  state.activeEngine = 'j2me-core';
+  state.activeEngine = 'freej2me';
   state.activeGameFile = gameFile;
   state.activeGameName = gameName;
 
@@ -377,7 +377,7 @@ async function activateJ2MEContainer(gameFile) {
   DOM.emulatorjsContainer.classList.remove('active');
   DOM.freej2meContainer.classList.add('active');
 
-  // Buat iframe CheerpJ J2ME Launcher, menyatu sempurna dengan monitor arcade
+  // Buat iframe FreeJ2ME-web, menyatu sempurna dengan monitor arcade
   const iframe = document.createElement('iframe');
   iframe.id = 'j2me-player';
   iframe.src = ENGINE_CONFIG.j2meCoreUrl;
@@ -386,18 +386,16 @@ async function activateJ2MEContainer(gameFile) {
   iframe.style.border = 'none';
   iframe.style.backgroundColor = '#000';
   iframe.style.overflow = 'hidden';
-  // CheerpJ membutuhkan izin cross-origin dan autoplay
   iframe.setAttribute('allow', 'fullscreen; autoplay; cross-origin-isolated');
-  iframe.setAttribute('title', 'J2ME CheerpJ Launcher');
-  // sandbox tidak dipakai karena CheerpJ butuh akses penuh ke WebAssembly
+  iframe.setAttribute('title', 'FreeJ2ME Web Emulator');
 
   DOM.freej2meViewport.innerHTML = '';
   DOM.freej2meViewport.appendChild(iframe);
 
-  DOM.saveStatusText.textContent = 'MENGINISIALISASI J2ME...';
+  DOM.saveStatusText.textContent = 'MEMUAT JVM J2ME...';
   DOM.saveStatusText.className = 'save-status-text';
 
-  // Baca file JAR terlebih dahulu, LALU kirim setelah iframe siap
+  // Baca file JAR terlebih dahulu
   let buffer = null;
   try {
     if (gameFile instanceof File || gameFile instanceof Blob) {
@@ -416,40 +414,42 @@ async function activateJ2MEContainer(gameFile) {
     return;
   }
 
-  logMessage('J2ME', `JAR "${gameName}" (${(buffer.byteLength/1024).toFixed(1)} KB) siap. Menunggu iframe CheerpJ...`, 'info');
+  logMessage('J2ME', `JAR "${gameName}" (${(buffer.byteLength/1024).toFixed(1)} KB) siap. Menunggu runtime FreeJ2ME...`, 'info');
 
-  // Kirim JAR setelah iframe selesai load
-  iframe.onload = () => {
-    logMessage('J2ME', `iFrame CheerpJ siap. Mengirim JAR "${gameName}" via postMessage...`, 'info');
-    DOM.saveStatusText.textContent = 'MEMUAT J2ME (CheerpJ)...';
-
-    const sendJar = () => {
-      try {
-        if (iframe.contentWindow) {
-          // Kirim salinan buffer agar tidak jadi detached ArrayBuffer
-          const copy = buffer.slice(0);
-          iframe.contentWindow.postMessage(
-            { type: 'LOAD_JAR', buffer: copy, name: gameName },
-            '*',
-            [copy]  // transfer ownership supaya tidak diblokir CORS memory limit
-          );
-        }
-      } catch (err) {
-        console.warn('postMessage JAR error:', err);
+  const sendJar = () => {
+    try {
+      if (iframe.contentWindow) {
+        // Gunakan buffer.slice(0) tanpa transfer list agar tidak menjadi detached buffer saat re-try
+        iframe.contentWindow.postMessage(
+          { type: 'LOAD_JAR', buffer: buffer.slice(0), name: gameName },
+          '*'
+        );
       }
-    };
+    } catch (err) {
+      console.warn('postMessage JAR error:', err);
+    }
+  };
 
+  // Dengarkan sinyal kesiapan dari iframe
+  const readyHandler = (e) => {
+    if (e.data && e.data.type === 'FREEJ2ME_READY') {
+      logMessage('J2ME', `FreeJ2ME siap. Mengirim payload JAR "${gameName}"...`, 'info');
+      sendJar();
+      DOM.saveStatusText.textContent = 'JAVA RUNNING';
+    }
+  };
+  window.addEventListener('message', readyHandler);
+
+  // Fallback pengiriman saat iframe onload selesai
+  iframe.onload = () => {
+    DOM.saveStatusText.textContent = 'MEMUAT GAME...';
     sendJar();
-    // Retry setelah 500ms untuk antisipasi lambatnya inisialisasi CheerpJ
-    setTimeout(sendJar, 500);
-    setTimeout(sendJar, 1500);
-
-    logMessage('J2ME', `Perintah muat JAR dikirim. CheerpJ sedang compile bytecode...`, 'info');
-    DOM.saveStatusText.textContent = 'JAVA AKTIF';
+    setTimeout(sendJar, 800);
+    setTimeout(sendJar, 2000);
   };
 
   iframe.onerror = () => {
-    logMessage('ERROR', 'Gagal memuat halaman CheerpJ Launcher.', 'error');
+    logMessage('ERROR', 'Gagal memuat halaman FreeJ2ME-web runner.', 'error');
   };
 }
 
