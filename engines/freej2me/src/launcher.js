@@ -58,21 +58,14 @@ async function main() {
 
 // ============================================================
 // AUTO LAUNCH: Dipanggil oleh Pixel Emulator via postMessage
+// Strategi: gunakan processGameFile() yang sudah ada, lalu
+// auto-trigger doAddSaveGame() tanpa user perlu klik tombol.
 // ============================================================
 async function autoLaunchJar(fileBuffer, fileName) {
-    const loadingEl = document.getElementById("loading");
-    const mainEl = document.getElementById("main");
-
     try {
         console.log('[PixelEmu] autoLaunchJar dimulai:', fileName);
 
-        if (loadingEl) {
-            loadingEl.textContent = "Installing " + (fileName || "game.jar") + "...";
-            loadingEl.style.display = "";
-        }
-        if (mainEl) mainEl.style.display = "none";
-
-        // Setup state game baru
+        // Inisialisasi state game baru (sama persis seperti setupAddMode)
         state.currentGame = {
             icon: emptyIcon,
             settings: { ...defaultSettings },
@@ -80,64 +73,60 @@ async function autoLaunchJar(fileBuffer, fileName) {
             systemProperties: {},
         };
 
-        const MIDletLoader = await lib.org.recompile.mobile.MIDletLoader;
-        const File = await lib.java.io.File;
+        // Pasang flag: setelah add-save-button siap, langsung klik otomatis
+        window._pixelEmuAutoLaunch = true;
 
-        const jarFile = await new File("/files/_tmp/" + (state.uploadedJars++) + ".jar");
-        await launcherUtil.copyJar(new Int8Array(fileBuffer), jarFile);
-        state.currentGame.jarFile = jarFile;
+        // Gunakan processGameFile() yang sudah terbukti benar
+        await processGameFile(fileBuffer, fileName || 'game.jar');
 
-        const AnalyserUtil = await lib.pl.zb3.freej2me.launcher.AnalyserUtil;
-        const analysisResult = await AnalyserUtil.analyseFile(jarFile, fileName || "game.jar");
-        fillGuessedSettings(analysisResult, state.currentGame);
+        // processGameFile() akan memanggil setupNewGameManage() -> setupAddManageGame()
+        // yang pada akhirnya mengaktifkan tombol "Add game".
+        // Kita poll sampai tombol itu aktif, lalu klik otomatis.
+        const MAX_WAIT = 30_000;
+        const POLL_MS  = 300;
+        const start    = Date.now();
 
-        if (state.lastLoader) {
-            try { await state.lastLoader.close(); } catch (_) {}
+        await new Promise((resolve, reject) => {
+            const check = () => {
+                // Jika flag sudah dicabut (misalnya karena error), batal
+                if (!window._pixelEmuAutoLaunch) {
+                    resolve();
+                    return;
+                }
+
+                const btn = document.getElementById('add-save-button');
+                if (btn && !btn.disabled) {
+                    console.log('[PixelEmu] Tombol "Add game" siap, mengklik otomatis...');
+                    window._pixelEmuAutoLaunch = false;
+                    btn.click();
+                    resolve();
+                } else if (Date.now() - start > MAX_WAIT) {
+                    window._pixelEmuAutoLaunch = false;
+                    reject(new Error('Timeout: tombol Add game tidak muncul dalam 30 detik'));
+                } else {
+                    setTimeout(check, POLL_MS);
+                }
+            };
+            check();
+        });
+
+        console.log('[PixelEmu] autoLaunchJar: doAddSaveGame() sudah dipicu.');
+
+        // Setelah initApp selesai, doAddSaveGame() memanggil reloadUI()
+        // yang akan menampilkan daftar game. Kita tunggu sebentar lalu
+        // langsung redirect ke run.html?app=<appId> yang baru diinstall.
+        const appId = state.currentGame?.appId;
+        if (appId) {
+            // Tunggu reloadUI() selesai (sekitar 1-2 detik)
+            await new Promise(r => setTimeout(r, 2000));
+            console.log('[PixelEmu] Meluncurkan game:', appId);
+            window.location.href = 'run.html?app=' + encodeURIComponent(appId);
         }
-
-        const loader = await MIDletLoader.getMIDletLoader(jarFile);
-        state.lastLoader = loader;
-
-        if (!(await loader.getAppId())) {
-            await launcherUtil.ensureAppId(loader, fileName || "game.jar");
-            loader.name = await loader.getAppId();
-        }
-
-        state.currentGame.appId = await loader.getAppId();
-        state.currentGame.name = loader.name || state.currentGame.appId;
-
-        const iconBytes = await loader.getIconBytes();
-        state.currentGame.icon = iconBytes
-            ? await getDataUrlFromBlob(new Blob([iconBytes]))
-            : emptyIcon;
-
-        await javaToKv(loader.properties, state.currentGame.appProperties);
-
-        const jsettings = await kvToJava(state.currentGame.settings);
-        const jappProps  = await kvToJava(state.currentGame.appProperties);
-        const jsysProps  = await kvToJava(state.currentGame.systemProperties);
-
-        await launcherUtil.initApp(
-            state.currentGame.jarFile,
-            state.lastLoader,
-            jsettings,
-            jappProps,
-            jsysProps
-        );
-
-        console.log('[PixelEmu] Instalasi selesai, meluncurkan:', state.currentGame.name);
-
-        if (loadingEl) {
-            loadingEl.textContent = "Launching " + state.currentGame.name + "...";
-        }
-
-        window.location.href = "run.html?app=" + encodeURIComponent(state.currentGame.appId);
 
     } catch (err) {
         console.error('[PixelEmu] autoLaunchJar error:', err);
-        if (loadingEl) loadingEl.style.display = "none";
-        if (mainEl) mainEl.style.display = "";
-        alert("Gagal auto-launch game JAR: " + err.message);
+        window._pixelEmuAutoLaunch = false;
+        alert('Gagal auto-launch game JAR: ' + err.message);
     }
 }
 
