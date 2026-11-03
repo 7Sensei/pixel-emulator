@@ -11,8 +11,7 @@
 const ENGINE_CONFIG = {
   emulatorjsLocalData: 'engines/emulatorjs/data/',
   emulatorjsCdnData: 'https://cdn.emulatorjs.org/stable/data/',
-  freej2meWebUrl: 'engines/freej2me/web/index.html',
-  freej2meCdnFallback: 'https://zb3.github.io/freej2me-web/web/',
+  j2meCoreUrl: 'engines/j2me-core/j2me-web-player.html',
   romsDir: 'roms',
   catalogueUrl: 'assets/games.json'
 };
@@ -20,8 +19,8 @@ const ENGINE_CONFIG = {
 // Peta Dukungan Ekstensi ke Engine & Core
 const EXTENSION_CONFIG = {
   // Java ME
-  jar: { engine: 'freej2me', core: 'midp-2.0', name: 'Java ME (FreeJ2ME)', badgeClass: 'active-freej2me' },
-  jad: { engine: 'freej2me', core: 'midp-2.0', name: 'Java ME (FreeJ2ME)', badgeClass: 'active-freej2me' },
+  jar: { engine: 'j2me-core', core: 'midp-2.0', name: 'Java ME (J2ME-Web-Core)', badgeClass: 'active-j2me' },
+  jad: { engine: 'j2me-core', core: 'midp-2.0', name: 'Java ME (J2ME-Web-Core)', badgeClass: 'active-j2me' },
 
   // Nintendo Classic & Handhelds
   nes: { engine: 'emulatorjs', core: 'nes', name: 'Nintendo Entertainment System', badgeClass: 'active-emulatorjs' },
@@ -358,6 +357,66 @@ async function activateEmulatorJSContainer(gameFile, coreName) {
 // 2. Container FreeJ2ME-web (Java ME MIDlets)
 // ============================================================================
 async function activateFreeJ2MEContainer(gameFile) {
+  logMessage('J2ME', `Activating J2ME-Web-Core container...`, 'info');
+  playChiptune('start');
+
+  cleanupActiveEngine();
+
+  let gameName = '';
+  if (gameFile instanceof File || gameFile instanceof Blob) {
+    gameName = gameFile.name || 'game.jar';
+  } else if (typeof gameFile === 'string') {
+    gameName = gameFile.split('/').pop();
+  }
+
+  state.activeEngine = 'j2me-core';
+  state.activeGameFile = gameFile;
+  state.activeGameName = gameName;
+
+  DOM.idleScreen.classList.add('hidden');
+  DOM.emulatorjsContainer.classList.remove('active');
+  DOM.freej2meContainer.classList.add('active');
+
+  // Create iframe for J2ME-Web-Core
+  const iframe = document.createElement('iframe');
+  iframe.id = 'j2me-player';
+  iframe.src = ENGINE_CONFIG.j2meCoreUrl;
+  iframe.style.width = '100%';
+  iframe.style.height = '100%';
+  iframe.style.border = 'none';
+  iframe.setAttribute('allow', 'autoplay; fullscreen');
+  iframe.setAttribute('title', 'J2ME Web Player');
+
+  DOM.freej2meViewport.innerHTML = '';
+  DOM.freej2meViewport.appendChild(iframe);
+
+  DOM.saveStatusText.textContent = 'AKTIF [J2ME]';
+  DOM.saveStatusText.className = 'save-status-text';
+
+  // Load JAR into iframe
+  iframe.onload = async () => {
+    logMessage('J2ME', `J2ME iframe loaded, sending JAR...`, 'info');
+    DOM.saveStatusText.textContent = 'MEMUAT J2ME...';
+    try {
+      let buffer = null;
+      if (gameFile instanceof File) {
+        buffer = await gameFile.arrayBuffer();
+      } else if (typeof gameFile === 'string') {
+        const res = await fetch(gameFile);
+        if (res.ok) buffer = await res.arrayBuffer();
+      }
+      if (!buffer) {
+        logMessage('WARN', 'No JAR buffer to load.', 'warn');
+        return;
+      }
+      iframe.contentWindow.postMessage({ type: 'LOAD_JAR', buffer, name: gameName }, '*');
+      logMessage('J2ME', `JAR ${gameName} sent to J2ME-Web-Core.`, 'info');
+      DOM.saveStatusText.textContent = 'MEMASANG GAME...';
+    } catch (e) {
+      logMessage('ERROR', `Failed to load JAR: ${e.message}`, 'error');
+    }
+  };
+}
   logMessage('FREEJ2ME', `Memulai aktivasi container FreeJ2ME-web...`, 'info');
   playChiptune('start');
 
@@ -430,8 +489,8 @@ async function activateFreeJ2MEContainer(gameFile) {
       // Tunggu launcher CheerpJ siap (isLauncherReady = true), maks 90 detik
       const waitForLauncher = () => new Promise((resolve, reject) => {
         const MAX_WAIT = 90_000;
-        const POLL_MS  = 500;
-        const start    = Date.now();
+        const POLL_MS = 500;
+        const start = Date.now();
 
         const check = () => {
           try {
@@ -491,7 +550,7 @@ function routeGame(gameFile, filenameOverride = null, metaContext = null) {
 
   updateMetadata(metaContext ? metaContext.title : filename, ext, config);
 
-  if (config.engine === 'freej2me') {
+  if (config.engine === 'j2me-core') {
     updateHeaderStatus(`J2ME ACTIVE // ${filename}`, config.badgeClass);
     activateFreeJ2MEContainer(gameFile);
   } else if (config.engine === 'emulatorjs') {
