@@ -400,45 +400,75 @@ async function activateFreeJ2MEContainer(gameFile) {
   logMessage('FREEJ2ME', `Container iFrame terpasang. Menyiapkan CheerpJ...`, 'info');
 
   iframe.onload = async () => {
-    logMessage('FREEJ2ME', `iFrame FreeJ2ME siap.`, 'info');
+    logMessage('FREEJ2ME', `iFrame FreeJ2ME siap. Menunggu launcher CheerpJ siap...`, 'info');
+    DOM.saveStatusText.textContent = 'MEMUAT J2ME...';
 
     try {
-      const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-      const targetInput = iframeDoc.getElementById('game-file-input');
+      // Baca ArrayBuffer dari gameFile (bisa File object atau URL preset)
+      let buffer = null;
 
-      if (!targetInput) {
-        logMessage('FREEJ2ME', `Player FreeJ2ME siap di kanvas.`, 'info');
+      if (gameFile instanceof File) {
+        buffer = await gameFile.arrayBuffer();
+        logMessage('FREEJ2ME', `Buffer JAR "${gameName}" siap (${buffer.byteLength} bytes).`, 'info');
+      } else if (typeof gameFile === 'string') {
+        const fetchRes = await fetch(gameFile);
+        if (fetchRes.ok) {
+          buffer = await fetchRes.arrayBuffer();
+          logMessage('FREEJ2ME', `Preset "${gameName}" diambil dari server (${buffer.byteLength} bytes).`, 'info');
+        } else {
+          logMessage('FREEJ2ME', `Preset "${gameName}" tidak ditemukan di server. Gunakan Browse manual.`, 'warn');
+          DOM.saveStatusText.textContent = 'KLIK BROWSE DI KANAN';
+          return;
+        }
+      }
+
+      if (!buffer) {
+        logMessage('FREEJ2ME', `Tidak ada file JAR untuk diluncurkan otomatis.`, 'info');
         return;
       }
 
-      if (gameFile instanceof File) {
-        const dataTransfer = new DataTransfer();
-        dataTransfer.items.add(gameFile);
-        targetInput.files = dataTransfer.files;
-        targetInput.dispatchEvent(new Event('change', { bubbles: true }));
-        logMessage('FREEJ2ME', `File JAR "${gameName}" langsung disuntikkan ke launcher FreeJ2ME.`, 'info');
-      } else if (typeof gameFile === 'string') {
-        try {
-          const fetchRes = await fetch(gameFile);
-          if (fetchRes.ok) {
-            const blob = await fetchRes.blob();
-            const fileObj = new File([blob], gameName, { type: 'application/java-archive' });
-            const dataTransfer = new DataTransfer();
-            dataTransfer.items.add(fileObj);
-            targetInput.files = dataTransfer.files;
-            targetInput.dispatchEvent(new Event('change', { bubbles: true }));
-            logMessage('FREEJ2ME', `Preset "${gameName}" berhasil diproses ke kanvas FreeJ2ME.`, 'info');
-          } else {
-            logMessage('FREEJ2ME', `Preset file "${gameName}" belum ada di folder roms/. Drag-and-drop manual didukung.`, 'warn');
+      // Tunggu launcher CheerpJ siap (isLauncherReady = true), maks 90 detik
+      const waitForLauncher = () => new Promise((resolve, reject) => {
+        const MAX_WAIT = 90_000;
+        const POLL_MS  = 500;
+        const start    = Date.now();
+
+        const check = () => {
+          try {
+            const cw = iframe.contentWindow;
+            if (cw && cw.isLauncherReady) {
+              resolve();
+            } else if (Date.now() - start > MAX_WAIT) {
+              reject(new Error('Timeout: launcher CheerpJ tidak siap dalam 90 detik'));
+            } else {
+              setTimeout(check, POLL_MS);
+            }
+          } catch (e) {
+            reject(e);
           }
-        } catch {
-          logMessage('FREEJ2ME', `Silakan unggah file JAR secara manual di kanvas player.`, 'info');
-        }
-      }
+        };
+        check();
+      });
+
+      logMessage('FREEJ2ME', `Menunggu launcher CheerpJ siap (maks 90 detik)...`, 'info');
+      DOM.saveStatusText.textContent = 'INISIALISASI J2ME...';
+
+      await waitForLauncher();
+
+      // Kirim JAR ke launcher via postMessage (same-origin, aman)
+      iframe.contentWindow.postMessage({
+        type: 'PIXEL_EMU_LOAD_JAR',
+        buffer,
+        name: gameName
+      }, '*');
+
+      logMessage('FREEJ2ME', `JAR "${gameName}" dikirim ke launcher FreeJ2ME via postMessage.`, 'info');
+      DOM.saveStatusText.textContent = 'MEMASANG GAME...';
+
     } catch (err) {
-      logMessage('WARN', `Akses iFrame dibatasi oleh CORS: ${err.message}`, 'warn');
+      logMessage('WARN', `Gagal auto-launch JAR: ${err.message}`, 'warn');
       DOM.saveStatusText.textContent = 'KLIK BROWSE DI KANAN';
-      alert('Karena pembatasan CORS pada iFrame eksternal, silakan klik tombol "Browse" secara manual di dalam layar emulator.');
+      alert('Tidak bisa meluncurkan game otomatis.\nSilakan klik tombol "Browse" secara manual di dalam layar emulator.');
     }
   };
 }

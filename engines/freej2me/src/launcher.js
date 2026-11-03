@@ -42,7 +42,121 @@ async function main() {
 
     document.getElementById("import-data-file").onchange = doImportData;
     document.getElementById("export-data-btn").onclick = doExportData;
+
+    // Sinyal ke Pixel Emulator bahwa launcher sudah siap menerima JAR
+    window.isLauncherReady = true;
+    console.log('[PixelEmu] Launcher FreeJ2ME siap.');
+
+    // Periksa apakah ada JAR yang sudah dikirim sebelum launcher siap
+    if (window.pendingAutoJar) {
+        const { buffer, name } = window.pendingAutoJar;
+        delete window.pendingAutoJar;
+        setTimeout(() => autoLaunchJar(buffer, name), 100);
+    }
 }
+
+
+// ============================================================
+// AUTO LAUNCH: Dipanggil oleh Pixel Emulator via postMessage
+// ============================================================
+async function autoLaunchJar(fileBuffer, fileName) {
+    const loadingEl = document.getElementById("loading");
+    const mainEl = document.getElementById("main");
+
+    try {
+        console.log('[PixelEmu] autoLaunchJar dimulai:', fileName);
+
+        if (loadingEl) {
+            loadingEl.textContent = "Installing " + (fileName || "game.jar") + "...";
+            loadingEl.style.display = "";
+        }
+        if (mainEl) mainEl.style.display = "none";
+
+        // Setup state game baru
+        state.currentGame = {
+            icon: emptyIcon,
+            settings: { ...defaultSettings },
+            appProperties: {},
+            systemProperties: {},
+        };
+
+        const MIDletLoader = await lib.org.recompile.mobile.MIDletLoader;
+        const File = await lib.java.io.File;
+
+        const jarFile = await new File("/files/_tmp/" + (state.uploadedJars++) + ".jar");
+        await launcherUtil.copyJar(new Int8Array(fileBuffer), jarFile);
+        state.currentGame.jarFile = jarFile;
+
+        const AnalyserUtil = await lib.pl.zb3.freej2me.launcher.AnalyserUtil;
+        const analysisResult = await AnalyserUtil.analyseFile(jarFile, fileName || "game.jar");
+        fillGuessedSettings(analysisResult, state.currentGame);
+
+        if (state.lastLoader) {
+            try { await state.lastLoader.close(); } catch (_) {}
+        }
+
+        const loader = await MIDletLoader.getMIDletLoader(jarFile);
+        state.lastLoader = loader;
+
+        if (!(await loader.getAppId())) {
+            await launcherUtil.ensureAppId(loader, fileName || "game.jar");
+            loader.name = await loader.getAppId();
+        }
+
+        state.currentGame.appId = await loader.getAppId();
+        state.currentGame.name = loader.name || state.currentGame.appId;
+
+        const iconBytes = await loader.getIconBytes();
+        state.currentGame.icon = iconBytes
+            ? await getDataUrlFromBlob(new Blob([iconBytes]))
+            : emptyIcon;
+
+        await javaToKv(loader.properties, state.currentGame.appProperties);
+
+        const jsettings = await kvToJava(state.currentGame.settings);
+        const jappProps  = await kvToJava(state.currentGame.appProperties);
+        const jsysProps  = await kvToJava(state.currentGame.systemProperties);
+
+        await launcherUtil.initApp(
+            state.currentGame.jarFile,
+            state.lastLoader,
+            jsettings,
+            jappProps,
+            jsysProps
+        );
+
+        console.log('[PixelEmu] Instalasi selesai, meluncurkan:', state.currentGame.name);
+
+        if (loadingEl) {
+            loadingEl.textContent = "Launching " + state.currentGame.name + "...";
+        }
+
+        window.location.href = "run.html?app=" + encodeURIComponent(state.currentGame.appId);
+
+    } catch (err) {
+        console.error('[PixelEmu] autoLaunchJar error:', err);
+        if (loadingEl) loadingEl.style.display = "none";
+        if (mainEl) mainEl.style.display = "";
+        alert("Gagal auto-launch game JAR: " + err.message);
+    }
+}
+
+// Listener postMessage dari parent (Pixel Emulator)
+window.addEventListener('message', async (e) => {
+    if (e.data && e.data.type === 'PIXEL_EMU_LOAD_JAR') {
+        const { buffer, name } = e.data;
+        console.log('[PixelEmu] Menerima postMessage PIXEL_EMU_LOAD_JAR:', name);
+        if (window.isLauncherReady) {
+            await autoLaunchJar(buffer, name);
+        } else {
+            window.pendingAutoJar = { buffer, name };
+        }
+    }
+});
+
+// ============================================================
+// END AUTO LAUNCH
+// ============================================================
 
 async function maybeReadCheerpJFileText(path) {
     const blob = await cjFileBlob(path);
